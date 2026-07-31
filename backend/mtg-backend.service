@@ -1,0 +1,16 @@
+[Unit]
+Description=MTG Sandbox Backend
+After=network.target
+
+[Service]
+User=ijohnson
+Group=www-data
+WorkingDirectory=/home/ijohnson/MtG-webapp/backend
+Environment="PATH=/home/ijohnson/MtG-webapp/venv/bin"
+Environment="DATABASE_URL=postgresql+psycopg2://admin:admin@127.0.0.1:5432/mtg_sandbox"
+Environment="PG_RAW_URL=postgresql://admin:admin@127.0.0.1:5432/mtg_sandbox"
+ExecStart=/home/ijohnson/MtG-webapp/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:5050 run:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

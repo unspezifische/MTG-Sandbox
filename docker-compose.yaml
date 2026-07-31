@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16
+    container_name: mtg_postgres
+    environment:
+      POSTGRES_DB: mtg_sandbox
+      POSTGRES_USER: mtg_user
+      POSTGRES_PASSWORD: mtg_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - mtg_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mtg_user -d mtg_sandbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    container_name: mtg_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mtg_user:mtg_pass@db:5432/mtg_sandbox
+      PG_RAW_URL: postgresql://mtg_user:mtg_pass@db:5432/mtg_sandbox
+      MTGJSON_SQLITE_PATH: /app/data/AllPrintings.sqlite
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data:ro
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mtg_frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  mtg_postgres_data:

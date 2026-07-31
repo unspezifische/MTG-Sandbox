@@ -1,0 +1,66 @@
+# Backend database dumps and data files
+/backend/data/
+/data/
+
+# Backend Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+instance/
+
+# Frontend dependencies
+/frontend/node_modules
+/frontend/.pnp
+/frontend/.pnp.js
+/frontend/package-lock.json
+/frontend/yarn.lock
+
+# Frontend testing
+/frontend/coverage
+
+# Frontend production build
+/frontend/build
+/frontend/dist
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
