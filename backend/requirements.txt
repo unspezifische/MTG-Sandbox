@@ -2,7 +2,9 @@ Flask
 Flask-SQLAlchemy
 Flask-Migrate
 flask_socketio
-eventlet
+gevent
+gevent-websocket
 psycopg2-binary
 SQLAlchemy
 requests
+gunicorn==23.0.0

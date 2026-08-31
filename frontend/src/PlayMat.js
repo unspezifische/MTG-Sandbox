@@ -845,6 +845,7 @@ export default function PlayMat({
     const selectionRef = useRef(null);
     const requestedAiTurnRef = useRef("");
     const layoutResizeRef = useRef(null);
+    const selectedRangeAnchorIdRef = useRef(null);
 
     const activePlayer = useMemo(() => {
         if (!gameState?.players?.length) return null;
@@ -860,6 +861,13 @@ export default function PlayMat({
     const opponentPlayers = useMemo(
         () => (gameState?.players || []).filter((player) => player.id !== activePlayer?.id),
         [activePlayer?.id, gameState?.players]
+    );
+    const battlefieldCardsOrdered = useMemo(
+        () => [...battlefieldCards].sort((first, second) => (
+            Number(first?.battlefieldY ?? 0) - Number(second?.battlefieldY ?? 0)
+            || Number(first?.battlefieldX ?? 0) - Number(second?.battlefieldX ?? 0)
+        )),
+        [battlefieldCards]
     );
 
     useEffect(() => {
@@ -1218,18 +1226,36 @@ export default function PlayMat({
         setHoverPreview(null);
         setSelectedCard(card);
         setSelectedCardIds((previous) => {
+            if (!readOnly && zone === "battlefield" && event?.shiftKey && !event?.metaKey && !event?.ctrlKey) {
+                const orderedIds = battlefieldCardsOrdered.map((entry) => entry.id);
+                const anchorId = selectedRangeAnchorIdRef.current ?? orderedIds[0];
+                const anchorIndex = orderedIds.indexOf(anchorId);
+                const cardIndex = orderedIds.indexOf(card.id);
+                if (anchorIndex >= 0 && cardIndex >= 0) {
+                    const [start, end] = anchorIndex <= cardIndex
+                        ? [anchorIndex, cardIndex]
+                        : [cardIndex, anchorIndex];
+                    return new Set(orderedIds.slice(start, end + 1));
+                }
+            }
             if (event?.shiftKey || event?.metaKey || event?.ctrlKey) {
                 const next = new Set(previous);
                 if (next.has(card.id)) next.delete(card.id);
                 else next.add(card.id);
+                if (zone === "battlefield" && !readOnly) {
+                    selectedRangeAnchorIdRef.current = card.id;
+                }
                 return next;
+            }
+            if (zone === "battlefield" && !readOnly) {
+                selectedRangeAnchorIdRef.current = card.id;
             }
             return new Set([card.id]);
         });
         const x = Math.max(8, Math.min(event?.clientX || 20, window.innerWidth - 240));
         const y = Math.max(8, Math.min(event?.clientY || 20, window.innerHeight - 440));
         setContextMenu({ x, y, card, zone, readOnly });
-    }, []);
+    }, [battlefieldCardsOrdered]);
 
     const handleCardContextMenu = useCallback((event, card) => {
         handleCardMenu(event, card, "battlefield");
@@ -1576,23 +1602,34 @@ export default function PlayMat({
         const view = canvasViewRef.current;
         const pointerX = (event.clientX - boardRect.left - view.x) / view.scale;
         const pointerY = (event.clientY - boardRect.top - view.y) / view.scale;
-        const currentX = Number(card?.battlefieldX ?? 40);
-        const currentY = Number(card?.battlefieldY ?? 40);
+        const shouldGroupDrag = selectedCardIds.has(card.id) && selectedCardIds.size > 1;
+        const dragIds = shouldGroupDrag ? selectedCardIds : new Set([card.id]);
+
+        const dragCards = battlefieldCards
+            .filter((entry) => dragIds.has(entry.id))
+            .map((entry) => ({
+                id: entry.id,
+                startX: Number(entry?.battlefieldX ?? 40),
+                startY: Number(entry?.battlefieldY ?? 40),
+            }));
 
         dragRef.current = {
-            card,
             pointerId: event.pointerId,
-            offsetX: pointerX - currentX,
-            offsetY: pointerY - currentY,
+            startPointerX: pointerX,
+            startPointerY: pointerY,
+            cards: dragCards,
+            latestPositions: Object.fromEntries(
+                dragCards.map((entry) => [entry.id, { x: entry.startX, y: entry.startY }])
+            ),
         };
 
         event.currentTarget.setPointerCapture?.(event.pointerId);
-    }, []);
+    }, [battlefieldCards, selectedCardIds]);
 
     const handleSelectionStart = useCallback((event) => {
         if (![0, 1].includes(event.button) || !battlefieldRef.current) return;
         if (event.target?.closest?.(
-            ".playmat-battlefield-card, .playmat-deck-anchor, .playmat-canvas-controls"
+            ".playmat-battlefield-card, .playmat-canvas-controls, .playmat-opponent-boards"
         )) return;
 
         event.preventDefault();
@@ -1604,6 +1641,7 @@ export default function PlayMat({
             selectionRef.current = { startX, startY };
             setSelectionBox({ left: startX, top: startY, width: 0, height: 0 });
             setSelectedCardIds(new Set());
+            selectedRangeAnchorIdRef.current = null;
         } else {
             panRef.current = {
                 pointerId: event.pointerId,
@@ -1653,8 +1691,19 @@ export default function PlayMat({
         if (!dragRef.current) return;
         const pointerX = (event.clientX - boardRect.left - view.x) / view.scale;
         const pointerY = (event.clientY - boardRect.top - view.y) / view.scale;
-        const nextX = pointerX - dragRef.current.offsetX;
-        const nextY = pointerY - dragRef.current.offsetY;
+        const deltaX = pointerX - dragRef.current.startPointerX;
+        const deltaY = pointerY - dragRef.current.startPointerY;
+
+        const nextPositions = Object.fromEntries(
+            dragRef.current.cards.map((entry) => [
+                entry.id,
+                {
+                    x: entry.startX + deltaX,
+                    y: entry.startY + deltaY,
+                },
+            ])
+        );
+        dragRef.current.latestPositions = nextPositions;
 
         setGameState((prev) => {
             if (!prev) return prev;
@@ -1666,8 +1715,12 @@ export default function PlayMat({
                     zones: {
                         ...player.zones,
                         battlefield: zoneArray(player, "battlefield").map((card) =>
-                            card.id === dragRef.current.card.id
-                                ? { ...card, battlefieldX: nextX, battlefieldY: nextY }
+                            nextPositions[card.id]
+                                ? {
+                                    ...card,
+                                    battlefieldX: nextPositions[card.id].x,
+                                    battlefieldY: nextPositions[card.id].y,
+                                }
                                 : card
                         ),
                     },
@@ -1691,30 +1744,28 @@ export default function PlayMat({
             }
             if (!dragRef.current) return;
 
-            const card = dragRef.current.card;
+            const draggedCards = [...dragRef.current.cards];
+            const latestPositions = dragRef.current.latestPositions || {};
             dragRef.current = null;
 
-            const latestCard =
-                gameState?.players
-                    ?.flatMap((player) => zoneArray(player, "battlefield"))
-                    .find((c) => c.id === card.id) || card;
-
             try {
-                await postAction({
-                    type: "move_card",
-                    cardInstanceId: latestCard.id,
-                    zone: "battlefield",
-                    zoneIndex: null,
-                    battlefieldX: Number(latestCard.battlefieldX ?? 40),
-                    battlefieldY: Number(latestCard.battlefieldY ?? 40),
-                    stackIndex: null,
-                });
+                await Promise.all(
+                    draggedCards.map((entry) => postAction({
+                        type: "move_card",
+                        cardInstanceId: entry.id,
+                        zone: "battlefield",
+                        zoneIndex: null,
+                        battlefieldX: Number(latestPositions[entry.id]?.x ?? entry.startX),
+                        battlefieldY: Number(latestPositions[entry.id]?.y ?? entry.startY),
+                        stackIndex: null,
+                    }))
+                );
             } catch (err) {
                 setError(err?.message || "Failed to update card position.");
                 fetchState();
             }
         },
-        [gameState, postAction, fetchState]
+        [postAction, fetchState]
     );
 
     const handleCanvasWheel = useCallback((event) => {
@@ -1918,6 +1969,26 @@ export default function PlayMat({
                     </div>
                 </div>
 
+                <div className="playmat-game-title-row">
+                    <strong>
+                        {gameState?.game?.name || `Game #${gameState?.game?.id || gameId || "?"}`}
+                    </strong>
+                    <span>
+                        {activePlayer ? `You are Player ${activePlayer.seatNumber}` : ""}
+                    </span>
+                </div>
+
+                {gameState?.alternateWinConditions?.length ? (
+                    <div className="playmat-alt-win-watch">
+                        <strong>Alternate win conditions</strong>
+                        {gameState.alternateWinConditions.map((condition) => (
+                            <span key={condition.cardInstanceId}>
+                                P{condition.seatNumber} · {condition.cardName} · {condition.status}
+                            </span>
+                        ))}
+                    </div>
+                ) : null}
+
                 {gameState?.game?.ruleset === "playtest" ? (
                     <div className="playmat-rules-policy disabled">
                         Rules engine disabled · illegal moves may be permitted.
@@ -1952,23 +2023,6 @@ export default function PlayMat({
                     </div>
                 ) : null}
 
-                <div style={{ height: `${layout.opponent}px`, minHeight: 0, flex: "0 0 auto" }}>
-                    <OpponentBoards
-                        players={opponentPlayers}
-                        onCardClick={handleCardMenu}
-                        onCardHover={handleCardHover}
-                    />
-                </div>
-                <div
-                    className="playmat-opponent-resizer"
-                    role="separator"
-                    aria-label="Resize opponent table"
-                    aria-orientation="horizontal"
-                    onPointerDown={(event) => beginLayoutResize("opponent", event)}
-                >
-                    <span />
-                </div>
-
                 {gameState?.randomResults?.length ? (
                     <div className="playmat-random-results" aria-live="polite">
                         {gameState.randomResults.slice(-4).reverse().map((result) => (
@@ -1979,26 +2033,6 @@ export default function PlayMat({
                             </span>
                         ))}
                     </div>
-                ) : null}
-
-                {gameState?.alternateWinConditions?.length ? (
-                    <div className="playmat-alt-win-watch">
-                        <strong>Alternate win conditions</strong>
-                        {gameState.alternateWinConditions.map((condition) => (
-                            <span key={condition.cardInstanceId}>
-                                P{condition.seatNumber} · {condition.cardName} · {condition.status}
-                            </span>
-                        ))}
-                    </div>
-                ) : null}
-
-                {usesCommandZone ? (
-                    <CommandZone
-                        cards={commandCards}
-                        sleeveStyle={activePlayer?.sleeveStyle}
-                        onCardClick={handleCardMenu}
-                        onCardHover={handleCardHover}
-                    />
                 ) : null}
 
                 <div
@@ -2039,6 +2073,16 @@ export default function PlayMat({
                             transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`,
                         }}
                     >
+                        <div
+                            className="playmat-opponent-canvas-layer"
+                            style={{ height: `${layout.opponent}px` }}
+                        >
+                            <OpponentBoards
+                                players={opponentPlayers}
+                                onCardClick={handleCardMenu}
+                                onCardHover={handleCardHover}
+                            />
+                        </div>
                         {preferences.showPlacementGuides !== false ? (
                         <div className="playmat-placement-guides" aria-hidden="true">
                             <div className="guide-creatures">Creatures · front line</div>
@@ -2067,55 +2111,58 @@ export default function PlayMat({
                         {selectionBox ? (
                             <div className="playmat-selection-box" style={selectionBox} />
                         ) : null}
-                        <div className="playmat-deck-anchor">
-                            <button
-                                type="button"
-                                className="playmat-deck-stack"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    setDeckMenuOpen((open) => !open);
-                                }}
-                            >
-                                <CardBack sleeveStyle={activePlayer?.sleeveStyle} />
-                                <strong>{libraryCount(activePlayer)}</strong>
-                            </button>
-                            {deckMenuOpen ? (
-                                <div className="playmat-deck-menu" onClick={(event) => event.stopPropagation()}>
-                                    <button type="button" onClick={handleDrawOne}>Draw top card <kbd>C</kbd></button>
-                                    <button type="button" onClick={handleBottomDraw}>Draw bottom card</button>
-                                    <button type="button" onClick={() => {
-                                        setToolsOpen(true);
-                                        handlePeekLibrary(5);
-                                    }}>Peek at top 5</button>
-                                    <button type="button" onClick={() => {
-                                        setPeekCards([]);
-                                        setLibraryActionsOpen(true);
-                                        setDeckMenuOpen(false);
-                                    }}>Scry / exile until…</button>
-                                    <button type="button" onClick={handleShuffleLibrary}>Shuffle <kbd>V</kbd></button>
-                                    <button type="button" onClick={() => setToolsOpen(true)}>More…</button>
-                                </div>
-                            ) : null}
-                        </div>
                     </div>
                     <div className="playmat-canvas-hint" aria-hidden="true">
-                        Drag empty space to pan · Scroll to zoom · Shift-drag to select
+                        Drag empty space to pan · Scroll to zoom · Shift-drag to select · Shift-click for range
                     </div>
                 </div>
             </main>
 
             <div className="playmat-hand-dock">
                 <div className="playmat-hand-heading">
-                    <strong>Hand</strong>
-                    <label>
-                        <span>Sort</span>
-                        <select value={handSort} onChange={(event) => setHandSort(event.target.value)}>
-                            <option value="type">Card type</option>
-                            <option value="mana-asc">Mana value · low to high</option>
-                            <option value="mana-desc">Mana value · high to low</option>
-                            <option value="name">Name</option>
-                        </select>
-                    </label>
+                    <div className="playmat-hand-heading-main">
+                        <strong>Hand</strong>
+                        <label>
+                            <span>Sort</span>
+                            <select value={handSort} onChange={(event) => setHandSort(event.target.value)}>
+                                <option value="type">Card type</option>
+                                <option value="mana-asc">Mana value · low to high</option>
+                                <option value="mana-desc">Mana value · high to low</option>
+                                <option value="name">Name</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div className="playmat-hand-deck-slot">
+                        <button
+                            type="button"
+                            className="playmat-deck-stack"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setDeckMenuOpen((open) => !open);
+                            }}
+                            aria-label="Open deck actions"
+                        >
+                            <CardBack sleeveStyle={activePlayer?.sleeveStyle} />
+                            <strong>{libraryCount(activePlayer)}</strong>
+                        </button>
+                        {deckMenuOpen ? (
+                            <div className="playmat-deck-menu" onClick={(event) => event.stopPropagation()}>
+                                <button type="button" onClick={handleDrawOne}>Draw top card <kbd>C</kbd></button>
+                                <button type="button" onClick={handleBottomDraw}>Draw bottom card</button>
+                                <button type="button" onClick={() => {
+                                    setToolsOpen(true);
+                                    handlePeekLibrary(5);
+                                }}>Peek at top 5</button>
+                                <button type="button" onClick={() => {
+                                    setPeekCards([]);
+                                    setLibraryActionsOpen(true);
+                                    setDeckMenuOpen(false);
+                                }}>Scry / exile until…</button>
+                                <button type="button" onClick={handleShuffleLibrary}>Shuffle <kbd>V</kbd></button>
+                                <button type="button" onClick={() => setToolsOpen(true)}>More…</button>
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
                 <HandFan
                     cards={handCards}
@@ -2126,6 +2173,14 @@ export default function PlayMat({
                     selectedCardId={selectedCard?.id}
                     highlightedCardIds={highlightedCardIds}
                 />
+                {usesCommandZone ? (
+                    <CommandZone
+                        cards={commandCards}
+                        sleeveStyle={activePlayer?.sleeveStyle}
+                        onCardClick={handleCardMenu}
+                        onCardHover={handleCardHover}
+                    />
+                ) : null}
             </div>
             <div
                 className="playmat-layout-resizer playmat-resizer-left"

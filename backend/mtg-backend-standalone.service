@@ -1,0 +1,21 @@
+[Unit]
+Description=MTG Sandbox Backend (standalone)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=www-data
+WorkingDirectory=/home/pi/MtG-webapp/backend
+Environment="PATH=/home/pi/MtG-webapp/.venv/bin"
+EnvironmentFile=-/etc/default/mtg-sandbox-backend
+
+# Socket.IO support is provided via eventlet worker.
+ExecStart=/home/pi/MtG-webapp/.venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 127.0.0.1:5050 run:app
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

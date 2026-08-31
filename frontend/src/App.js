@@ -15,6 +15,30 @@ const isMtgSubpath = window.location.pathname.startsWith("/mtg");
 const API_BASE = isMtgSubpath ? "/mtg/api" : "/api";
 const SOCKET_PATH = isMtgSubpath ? "/mtg/socket.io" : "/socket.io";
 const LOBBY_TOKEN_KEY = "mtg-sandbox-lobby-token";
+const KACHHAPA_TOKEN_KEYS = [
+  "kachhapa_token",
+  "kachhapaToken",
+  "access_token",
+  "accessToken",
+  "jwt",
+  "token",
+  "auth_token",
+  "authToken",
+];
+const KACHHAPA_USERNAME_FIELDS = [
+  "username",
+  "preferred_username",
+  "nickname",
+  "name",
+  "email",
+  "sub",
+];
+const KACHHAPA_PROFILE_ENDPOINTS = [
+  "/api/auth/me",
+  "/api/users/me",
+  "/api/me",
+  "/auth/me",
+];
 const SLEEVE_OPTIONS = [
   ["classic", "Classic MTG"],
   ["obsidian-matte", "Obsidian · Matte"],
@@ -33,6 +57,76 @@ function getLobbyParticipantToken() {
     : `${Date.now()}-${Math.random()}-${Math.random()}`;
   window.localStorage.setItem(LOBBY_TOKEN_KEY, token);
   return token;
+}
+
+function decodeJwtPayload(token) {
+  if (!token || !token.includes(".")) return null;
+  const [, payload] = token.split(".");
+  if (!payload) return null;
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=");
+    const decoded = window.atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function findUsernameInPayload(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  for (const field of KACHHAPA_USERNAME_FIELDS) {
+    const value = payload[field];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  if (payload.user && typeof payload.user === "object") {
+    for (const field of KACHHAPA_USERNAME_FIELDS) {
+      const value = payload.user[field];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return "";
+}
+
+function readTokenFromCookie() {
+  const cookie = document.cookie || "";
+  if (!cookie) return "";
+  const parts = cookie.split(";").map((part) => part.trim());
+  for (const key of KACHHAPA_TOKEN_KEYS) {
+    const prefix = `${key}=`;
+    const match = parts.find((part) => part.startsWith(prefix));
+    if (!match) continue;
+    const value = match.slice(prefix.length);
+    if (value) return decodeURIComponent(value);
+  }
+  return "";
+}
+
+function getStoredKachhapaToken() {
+  for (const key of KACHHAPA_TOKEN_KEYS) {
+    const local = window.localStorage.getItem(key);
+    if (local) return local;
+    const session = window.sessionStorage.getItem(key);
+    if (session) return session;
+  }
+  return readTokenFromCookie();
+}
+
+async function fetchKachhapaUsername(token) {
+  for (const endpoint of KACHHAPA_PROFILE_ENDPOINTS) {
+    try {
+      const response = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const username = findUsernameInPayload(payload);
+      if (username) return username;
+    } catch {
+      // Fall through to JWT parsing fallback.
+    }
+  }
+  return "";
 }
 
 function App() {
@@ -57,6 +151,38 @@ function App() {
   const [decksLoading, setDecksLoading] = useState(true);
   const [decksError, setDecksError] = useState("");
   const [participantToken] = useState(getLobbyParticipantToken);
+  const [signedInUser, setSignedInUser] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateKachhapaSession() {
+      const token = getStoredKachhapaToken();
+      if (!token) {
+        if (!cancelled) setSignedInUser("");
+        return;
+      }
+
+      const apiUsername = await fetchKachhapaUsername(token);
+      const jwtPayload = decodeJwtPayload(token);
+      const jwtUsername = findUsernameInPayload(jwtPayload);
+      const resolvedUsername = apiUsername || jwtUsername || "player";
+
+      if (!cancelled) setSignedInUser(resolvedUsername);
+    }
+    hydrateKachhapaSession();
+
+    const handleStorage = (event) => {
+      if (!event.key || KACHHAPA_TOKEN_KEYS.includes(event.key)) {
+        hydrateKachhapaSession();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     const socketClient = io({
@@ -911,6 +1037,9 @@ function App() {
         </nav>
 
         <div className="topbar-right">
+          {signedInUser ? (
+            <div className="topbar-welcome">Welcome back {signedInUser}</div>
+          ) : null}
           <button
             className={`topbar-action ${activePage === "settings" ? "active" : ""}`}
             type="button"

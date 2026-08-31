@@ -43,6 +43,20 @@ button {
   align-items: center;
 }
 
+.topbar-right {
+  gap: 10px;
+}
+
+.topbar-welcome {
+  font-size: 0.9rem;
+  color: #bfdbfe;
+  background: #172554;
+  border: 1px solid #1e3a8a;
+  border-radius: 999px;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+
 .app-brand {
   font-size: 1.1rem;
   font-weight: 700;
@@ -3685,6 +3699,7 @@ textarea.modal-input {
 
 .playmat-command-zone {
   min-height: 94px;
+  margin-top: 8px;
   padding: 9px 12px;
   border: 1px dashed #9a7ed0;
   border-radius: 12px;
@@ -3765,6 +3780,28 @@ textarea.modal-input {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+.playmat-game-title-row {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.playmat-game-title-row strong {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+
+.playmat-game-title-row span {
+  color: #94a3b8;
+  font-size: 0.72rem;
 }
 
 .playmat-toolbar {
@@ -3898,6 +3935,24 @@ textarea.modal-input {
   will-change: transform;
 }
 
+.playmat-opponent-canvas-layer {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  min-height: 120px;
+  max-height: 420px;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.playmat-opponent-canvas-layer .playmat-opponent-boards {
+  border: 1px solid #374151;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.62);
+  padding: 5px;
+}
+
 .playmat-battlefield-card {
   z-index: 10;
 }
@@ -3957,6 +4012,31 @@ textarea.modal-input {
   border: 1px solid #334155;
   border-radius: 9px;
   background: #101827;
+}
+
+.playmat-hand-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.playmat-hand-heading-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.playmat-hand-heading-main > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playmat-hand-deck-slot {
+  position: relative;
+  flex: 0 0 auto;
 }
 
 .playmat-hand-card {
@@ -4292,6 +4372,10 @@ textarea.modal-input {
   white-space: nowrap;
 }
 
+.playmat-alt-win-watch strong {
+  color: #fed7aa;
+}
+
 .playmat-selection-box {
   position: absolute;
   z-index: 20;
@@ -4347,8 +4431,8 @@ textarea.modal-input {
 
 .playmat-deck-menu {
   position: absolute;
-  right: 76px;
-  bottom: 0;
+  right: calc(100% + 8px);
+  top: 0;
 }
 
 .playmat-card-context {
@@ -4949,6 +5033,25 @@ kbd {
 
   .playmat-hand-dock {
     grid-column: 1 / span 2;
+  }
+
+  .playmat-game-title-row span {
+    display: none;
+  }
+
+  .playmat-opponent-canvas-layer {
+    left: 10px;
+    right: 10px;
+    top: 10px;
+    max-height: 300px;
+  }
+
+  .playmat-hand-heading {
+    align-items: center;
+  }
+
+  .playmat-hand-heading-main {
+    flex-wrap: wrap;
   }
 
   .playmat-layout-resizer,

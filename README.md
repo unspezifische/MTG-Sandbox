@@ -1,95 +1,33 @@
-This is mainly intended as an add-on service for [Kachhapa- the World Turtle|https://github.com/unspezifische/Kachhapa--The-World-Turtle], which is itself a TTRPG campaign manager. The MtG Sandbox web app is intended as a stand-along service, using the same database backend and routing already provided by Kachhapa, to enable user to build their own Magic decks, along with a plethora of resources for examining deck metrics, goldfishing capabilities, simulating games using heuristic AI, and playing against other players in realtime. Since an important part of learning is from mistakes, games are saved and stored in a way that allows players to review a match afterwards and find clues they missed or, with the assistance of the heuristic AI, test alternate methods for dealing with opponents to explore different branches of how a match *could* have gone instead.
+This is mainly intended as an add-on service for [https://github.com/unspezifische/Kachhapa--The-World-Turtle | cKachhapa- the World Turtle], which is itself a TTRPG campaign manager. The MtG Sandbox web app is intended as a stand-along service, using the same database backend and routing already provided by Kachhapa, to enable user to build their own Magic decks, along with a plethora of resources for examining deck metrics, goldfishing capabilities, simulating games using heuristic AI, and playing against other players in realtime. Since an important part of learning is from mistakes, games are saved and stored in a way that allows players to review a match afterwards and find clues they missed or, with the assistance of the heuristic AI, test alternate methods for dealing with opponents to explore different branches of how a match *could* have gone instead.
 
-## Raspberry Pi Full Stack Setup (Docker Compose)
+## Raspberry Pi (no Docker)
 
-These steps run the full stack (Postgres + Flask backend + React frontend served by Nginx) on a Raspberry Pi.
+### OPTION 1- Add MTG Sandbox routes to an existing nginx config
 
-### 1) Prerequisites
+Use the additive helper script in [backend/scripts/add_mtg_nginx_proxy.sh](backend/scripts/add_mtg_nginx_proxy.sh).
 
-- Raspberry Pi 4 or 5 (8 GB RAM recommended)
-- 64-bit Raspberry Pi OS (Bookworm or newer)
-- At least 15 GB free disk space for images, containers, and database growth
+1. Make the script executable:
+	`chmod +x backend/scripts/add_mtg_nginx_proxy.sh`
+2. Patch your existing nginx config in place:
+	`sudo backend/scripts/add_mtg_nginx_proxy.sh /etc/nginx/nginx.conf`
+	or
+	`sudo backend/scripts/add_mtg_nginx_proxy.sh /etc/nginx/sites-available/default`
 
-Install Docker and Compose plugin:
+The script creates a timestamped backup, inserts or updates a marker-delimited MTG block, runs `nginx -t`, and tells you to reload nginx.
 
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-newgrp docker
-docker --version
-docker compose version
-```
+### OPTION 2- Install standalone backend service
 
-### 2) Clone and prepare project files
+Use [backend/mtg-backend-standalone.service](backend/mtg-backend-standalone.service) as a template.
 
-```bash
-git clone https://github.com/unspezifische/MTG-Sandbox.git
-cd MTG-Sandbox
-```
+1. Copy env template and set DB credentials:
+	`sudo cp backend/mtg-backend.env.example /etc/default/mtg-sandbox-backend`
+2. Copy service unit and adjust paths/user (`/home/pi`, `User=pi`) if needed:
+	`sudo cp backend/mtg-backend-standalone.service /etc/systemd/system/mtg-backend.service`
+3. Enable and start:
+	`sudo systemctl daemon-reload`
+	`sudo systemctl enable --now mtg-backend.service`
 
-The backend expects the MTGJSON SQLite source file at `data/AllPrintings.sqlite`.
+The backend listens on `127.0.0.1:5050` and is intended to be exposed only through nginx reverse proxy routes.'
 
-If you already have it, copy it in:
-
-```bash
-mkdir -p data
-cp /path/to/AllPrintings.sqlite data/AllPrintings.sqlite
-```
-
-### 3) Build and start the full stack
-
-```bash
-docker compose up -d --build
-docker compose ps
-```
-
-Services and ports:
-
-- Frontend (Nginx): `http://<pi-ip>:3000`
-- Backend API (direct): `http://<pi-ip>:5050`
-- Postgres: `<pi-ip>:5433` (host port)
-
-### 4) First-time card data import (required once)
-
-After containers are healthy, import from SQLite into Postgres:
-
-```bash
-docker compose exec backend python scripts/importAllPrintings.py
-```
-
-Notes:
-
-- This can take a while on Pi hardware.
-- If interrupted, re-run the same command.
-
-### 5) Verify the app is reachable
-
-```bash
-curl -I http://localhost:3000
-curl -I http://localhost:5050
-```
-
-Then open `http://<pi-ip>:3000` from another device on the same network.
-
-### 6) Common operations
-
-Start/stop:
-
-```bash
-docker compose up -d
-docker compose down
-```
-
-View logs:
-
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f db
-```
-
-Rebuild after code changes:
-
-```bash
-docker compose up -d --build
-```
+# Docker Container
+This stack can also be run in a Docker environment. The included `docker-compose.yaml` can be used by running 'docker compose --build -d' in the terminal window. As always, make sure the Docker engine is already running.
