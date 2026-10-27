@@ -19,7 +19,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db, socketio
 from .models.mtgCore import Card, Printing, PrintingImage, Set
-from .models.mtgDecks import Deck, DeckCard
+from .models.mtgDecks import Deck, DeckCard, DeckTokenPreference, DeckVersion
+from .auth import current_user_id
+from .services.deck_identity import (owned_deck, deck_entries, prepare_edit, finish_edit,
+    ensure_current_version, find_entry, select_revision, revision_entries, source_summary)
 from .models.mtgGames import Game, GamePlayer, CardInstance, GameEvent, StateSnapshot
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -286,6 +289,8 @@ def serialize_card_summary(card: Card) -> dict[str, Any]:
     return {
         "id": card.id,
         "uuid": card.uuid,
+        "oracleId": card.oracleId,
+        "isToken": bool(card.isToken),
         "name": card.name,
         "manaCost": card.manaCost,
         "manaValue": float(card.manaValue) if card.manaValue is not None else None,
@@ -335,6 +340,141 @@ def serialize_deck_card(deck_card: DeckCard) -> dict[str, Any]:
         "addedAt": deck_card.addedAt.isoformat() if deck_card.addedAt else None,
         "card": serialize_card_summary(card) if card is not None else None,
     }
+
+
+def related_token_uuids(card: Card | None) -> list[str]:
+    raw = card.rawJson if card is not None and isinstance(card.rawJson, dict) else {}
+    related = raw.get("relatedCards")
+    if isinstance(related, str):
+        try:
+            import json
+            related = json.loads(related)
+        except (TypeError, ValueError):
+            related = {}
+    if not isinstance(related, dict) or not isinstance(related.get("tokens"), list):
+        return []
+    return [str(value) for value in related["tokens"] if value]
+
+
+def serialize_token_version(card: Card, printing: Printing) -> dict[str, Any]:
+    card_set = getattr(printing, "set", None)
+    return {
+        "cardId": card.id,
+        "printingId": printing.id,
+        "uuid": printing.uuid,
+        "name": card.name,
+        "oracleId": card.oracleId,
+        "typeLine": card.typeLine,
+        "oracleText": card.oracleText,
+        "power": card.power,
+        "toughness": card.toughness,
+        "setCode": card_set.code if card_set else card.defaultSetCode,
+        "setName": card_set.name if card_set else card.defaultSetName,
+        "collectorNumber": printing.collectorNumber,
+        "artist": printing.artist,
+        "scryfallId": extract_identifier(printing.identifiers, "scryfallId"),
+        "imageSmall": pick_printing_image(printing, "small"),
+        "imageNormal": pick_printing_image(printing, "normal") or pick_printing_image(printing, "small"),
+    }
+
+
+def deck_token_groups(
+    deck: Deck,
+    entries=None,
+    version: DeckVersion | None = None,
+    include_versions: bool = True,
+) -> list[dict[str, Any]]:
+    """Resolve token types produced by a deck and every available printing."""
+    selected_entries = list(entries if entries is not None else deck_entries(deck))
+    source_names: dict[str, set[str]] = defaultdict(set)
+    token_uuids: set[str] = set()
+    for entry in selected_entries:
+        for token_uuid in related_token_uuids(getattr(entry, "card", None)):
+            token_uuids.add(token_uuid)
+            if getattr(entry, "card", None) is not None:
+                source_names[token_uuid].add(entry.card.name)
+
+    selected_version = version or getattr(deck, "currentVersion", None)
+    if (
+        selected_version is not None
+        and selected_version.revisionType == "stock"
+        and selected_version.basePreconVersion is not None
+    ):
+        for token_entry in selected_version.basePreconVersion.cards:
+            if token_entry.board != "tokens" or token_entry.card is None:
+                continue
+            token_uuids.add(token_entry.card.uuid)
+            source_names[token_entry.card.uuid].add("Official token list")
+
+    if not token_uuids:
+        return []
+    referenced = Card.query.filter(Card.uuid.in_(token_uuids), Card.isToken.is_(True)).all()
+    if not referenced:
+        return []
+
+    referenced_by_key: dict[str, list[Card]] = defaultdict(list)
+    for card in referenced:
+        referenced_by_key[card.oracleId or f"uuid:{card.uuid}"].append(card)
+    oracle_ids = [key for key in referenced_by_key if not key.startswith("uuid:")]
+    variants = list(referenced)
+    if oracle_ids:
+        variants = Card.query.filter(Card.isToken.is_(True), Card.oracleId.in_(oracle_ids)).all()
+        variant_ids = {card.id for card in variants}
+        variants.extend(card for card in referenced if card.id not in variant_ids)
+
+    variants_by_key: dict[str, list[tuple[Card, Printing]]] = defaultdict(list)
+    for card in variants:
+        key = card.oracleId or f"uuid:{card.uuid}"
+        for printing in cast(list[Printing], card.printings or []):
+            variants_by_key[key].append((card, printing))
+
+    preferences = {preference.tokenOracleId: preference for preference in deck.tokenPreferences or []}
+    groups = []
+    for key, referenced_cards in referenced_by_key.items():
+        available = sorted(
+            variants_by_key.get(key, []),
+            key=lambda pair: (
+                pair[0].defaultSetCode or "",
+                pair[1].collectorNumber or "",
+                pair[1].id,
+            ),
+        )
+        if not available:
+            continue
+        referenced_ids = {card.id for card in referenced_cards}
+        allowed_printing_ids = {printing.id for _, printing in available}
+        preference = preferences.get(key)
+        preferred_printing_id = (
+            preference.preferredPrintingId
+            if preference and preference.preferredPrintingId in allowed_printing_ids
+            else next(
+                (printing.id for card, printing in available if card.id in referenced_ids),
+                available[0][1].id,
+            )
+        )
+        preferred_card, preferred_printing = next(
+            pair for pair in available if pair[1].id == preferred_printing_id
+        )
+        group = {
+            "tokenOracleId": key,
+            "name": preferred_card.name,
+            "typeLine": preferred_card.typeLine,
+            "power": preferred_card.power,
+            "toughness": preferred_card.toughness,
+            "createdBy": sorted({
+                source
+                for card in referenced_cards
+                for source in source_names.get(card.uuid, set())
+            }),
+            "preferredPrintingId": preferred_printing_id,
+            "preferred": serialize_token_version(preferred_card, preferred_printing),
+        }
+        if include_versions:
+            group["versions"] = [
+                serialize_token_version(card, printing) for card, printing in available
+            ]
+        groups.append(group)
+    return sorted(groups, key=lambda group: (group["name"], group["tokenOracleId"]))
 
 
 def estimate_commander_bracket(deck_cards: list[DeckCard]) -> dict[str, Any]:
@@ -423,8 +563,8 @@ def estimate_commander_bracket(deck_cards: list[DeckCard]) -> dict[str, Any]:
     }
 
 
-def serialize_deck(deck: Deck, include_cards: bool = False) -> dict[str, Any]:
-    deck_cards = cast(list[DeckCard], deck.cards or [])
+def serialize_deck(deck: Deck, include_cards: bool = False, statistics=None) -> dict[str, Any]:
+    deck_cards = deck_entries(deck)
     commander_entries = [entry for entry in deck_cards if entry.isCommander]
     commander_names = [
         entry.card.name
@@ -440,21 +580,9 @@ def serialize_deck(deck: Deck, include_cards: bool = False) -> dict[str, Any]:
         },
         key=lambda color: "WUBRG".find(color) if color in "WUBRG" else 99,
     )
-    game_players = cast(list[GamePlayer], deck.gamePlayers or [])
-    completed_players = [
-        player
-        for player in game_players
-        if player.result or (player.game is not None and player.game.status == "completed")
-    ]
-    wins = sum(
-        1
-        for player in completed_players
-        if (player.result or "").lower() in {"win", "won", "winner"}
-        or (
-            player.game is not None
-            and player.game.winnerGamePlayerId == player.id
-        )
-    )
+    from .services.statistics import deck_summaries, empty_summary
+    stats = (statistics if statistics is not None else
+             deck_summaries(current_user_id(), [deck.id]).get(deck.id, empty_summary()))
     bracket_estimate = estimate_commander_bracket(deck_cards)
 
     payload: dict[str, Any] = {
@@ -468,12 +596,22 @@ def serialize_deck(deck: Deck, include_cards: bool = False) -> dict[str, Any]:
         "requiresCommander": deck.format in COMMANDER_FORMATS,
         "hasRequiredCommander": deck.format not in COMMANDER_FORMATS or bool(commander_entries),
         "cardCount": sum(entry.quantity or 0 for entry in deck_cards),
-        "gamesPlayed": len(completed_players),
-        "wins": wins,
-        "winRate": round((wins / len(completed_players)) * 100, 1) if completed_players else None,
+        "gamesPlayed": stats["gamesPlayed"],
+        "wins": stats["wins"],
+        "losses": stats["losses"],
+        "draws": stats["draws"],
+        "winRate": stats["winRate"],
+        "statisticsScope": "competitive",
         "ownerUserId": deck.ownerUserId,
         "sourceType": deck.sourceType,
         "sourceProductId": deck.sourceProductId,
+        "sourcePreconId": deck.sourcePreconId,
+        "sourcePreconVersionId": deck.sourcePreconVersionId,
+        "libraryStatus": deck.libraryStatus,
+        "currentRevisionId": deck.currentVersionId,
+        "revisionNumber": deck.currentVersion.versionNumber if deck.currentVersion else None,
+        "revisionType": deck.currentVersion.revisionType if deck.currentVersion else "custom",
+        "sourcePrecon": source_summary(deck),
         "notes": deck.notes,
         "isPublic": deck.isPublic,
         "visibility": "public" if deck.isPublic else "private",
@@ -494,6 +632,7 @@ def serialize_deck(deck: Deck, include_cards: bool = False) -> dict[str, Any]:
             ),
         )
         payload["cards"] = [serialize_deck_card(entry) for entry in sorted_cards]
+        payload["tokens"] = deck_token_groups(deck)
 
     return payload
 
@@ -696,6 +835,8 @@ def serialize_game(game: Game, include_players: bool = True, include_snapshot: b
         "rngSeed": game.rngSeed,
         "engineVersion": game.engineVersion,
         "rulesVersion": game.rulesVersion,
+        "isInvalidated": game.isInvalidated,
+        "invalidationReason": game.invalidationReason,
         "winnerGamePlayerId": game.winnerGamePlayerId,
         "notes": game.notes,
         "startedAt": game.startedAt.isoformat() if game.startedAt else None,
@@ -719,6 +860,7 @@ def serialize_card_instance(card_instance: CardInstance) -> dict[str, Any]:
 
     return {
         "id": card_instance.id,
+        "instanceType": getattr(card_instance, "instanceType", "deckCard"),
         "zone": getattr(card_instance, "zone", None),
         "zoneIndex": getattr(card_instance, "zoneIndex", None),
         "isCommander": bool(getattr(card_instance, "isCommander", False)),
@@ -798,6 +940,7 @@ def serialize_game_state(game: Game) -> dict[str, Any]:
                 "sleeveStyle": player.sleeveStyle or "classic",
                 "result": player.result,
                 "zones": zones_payload,
+                "tokenOptions": list(player.tokenSelections or []),
             }
         )
 
@@ -992,6 +1135,58 @@ def handle_move_card(game_id: int, card_instance_id: int, payload: dict[str, Any
         },
     )
 
+    db.session.commit()
+    return serialize_game_state(game)
+
+
+def handle_create_token(
+    game_id: int,
+    game_player_id: int,
+    token_oracle_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    game = get_game_or_error(game_id)
+    player = GamePlayer.query.filter_by(id=game_player_id, gameId=game_id).first()
+    if player is None or player.deck is None or player.deckVersion is None:
+        raise ValueError("That player does not have a playable deck.")
+    group = next(
+        (item for item in (player.tokenSelections or []) if item["tokenOracleId"] == token_oracle_id),
+        None,
+    )
+    if group is None:
+        raise ValueError("That token is not available to this deck.")
+    selected = group["preferred"]
+    event = create_game_event(
+        game_id,
+        player.id,
+        "create_token",
+        {
+            "gamePlayerId": player.id,
+            "tokenOracleId": token_oracle_id,
+            "cardId": selected["cardId"],
+            "printingId": selected["printingId"],
+        },
+    )
+    db.session.flush()
+    token = CardInstance(
+        gameId=game_id,
+        gamePlayerId=player.id,
+        cardId=selected["cardId"],
+        printingId=selected["printingId"],
+        instanceType="token",
+        createdByEventId=event.id,
+        zone="battlefield",
+        battlefieldX=Decimal(str(
+            payload["battlefieldX"] if payload.get("battlefieldX") is not None else 48
+        )),
+        battlefieldY=Decimal(str(
+            payload["battlefieldY"] if payload.get("battlefieldY") is not None else 96
+        )),
+        metadataJson={"tokenOracleId": token_oracle_id},
+    )
+    db.session.add(token)
+    db.session.flush()
+    event.payloadJson = {**event.payloadJson, "cardInstanceId": token.id}
     db.session.commit()
     return serialize_game_state(game)
 
@@ -1588,6 +1783,14 @@ def dispatch_game_action(game_id: int, action: dict[str, Any]) -> tuple[str, dic
             payload=action,
         )
 
+    if action_type == "create_token":
+        return action_type, handle_create_token(
+            game_id=game_id,
+            game_player_id=int(action["gamePlayerId"]),
+            token_oracle_id=str(action["tokenOracleId"]),
+            payload=action,
+        )
+
     if action_type == "tap_card":
         return action_type, handle_tap_card(
             game_id=game_id,
@@ -1701,7 +1904,7 @@ def list_cards():
     q = request.args.get("q", "").strip()
     limit = min(int(request.args.get("limit", 25)), 100)
 
-    query = Card.query
+    query = Card.query.filter(Card.isToken.is_(False))
 
     if q:
         ilike = f"%{q}%"
@@ -1762,7 +1965,12 @@ def get_card(uuid: str):
 @api_bp.get("/decks")
 def list_decks():
     recent_only = str(request.args.get("recent") or "").lower() in {"1", "true", "yes"}
-    query = Deck.query
+    uid = current_user_id()
+    status = request.args.get("status", "saved")
+    if status not in {"saved", "archived", "unlisted"}:
+        return jsonify(error="Invalid library status"), 400
+    query = Deck.query.filter(Deck.libraryStatus == status,
+        or_(Deck.ownerUserId == uid, Deck.ownerUserId.is_(None)))
     if recent_only:
         query = query.filter(Deck.lastUsedAt.isnot(None)).order_by(
             Deck.lastUsedAt.desc(),
@@ -1771,11 +1979,15 @@ def list_decks():
     else:
         query = query.order_by(Deck.updatedAt.desc(), Deck.id.desc())
     decks = query.all()
-    return jsonify([serialize_deck(deck, include_cards=False) for deck in decks])
+    from .services.statistics import deck_summaries, empty_summary
+    summaries = deck_summaries(uid, [d.id for d in decks])
+    return jsonify([serialize_deck(deck, include_cards=False,
+        statistics=summaries.get(deck.id, empty_summary())) for deck in decks])
 
 
 @api_bp.post("/decks")
 def create_deck():
+    uid = current_user_id(required=True)
     payload = request.get_json(silent=True) or {}
 
     name = (payload.get("name") or "").strip()
@@ -1807,7 +2019,7 @@ def create_deck():
         format=payload.get("format") or "commander",
         commanderCount=len(commander_cards) or payload.get("commanderCount") or 1,
         colorIdentity=payload.get("colorIdentity"),
-        ownerUserId=payload.get("ownerUserId"),
+        ownerUserId=uid,
         sourceType=payload.get("sourceType") or "custom",
         sourceProductId=payload.get("sourceProductId"),
         notes=payload.get("notes"),
@@ -1830,6 +2042,8 @@ def create_deck():
             )
         )
 
+    deck.addedToLibraryAt = utcnow()
+    ensure_current_version(deck)
     db.session.commit()
 
     return jsonify(serialize_deck(deck, include_cards=True)), 201
@@ -1837,13 +2051,51 @@ def create_deck():
 
 @api_bp.get("/decks/<int:deck_id>")
 def get_deck(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id)
     return jsonify(serialize_deck(deck, include_cards=True))
+
+
+@api_bp.put("/decks/<int:deck_id>/tokens/<path:token_oracle_id>")
+def update_deck_token_preference(deck_id: int, token_oracle_id: str):
+    deck = owned_deck(deck_id, edit=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        printing_id = int(payload.get("preferredPrintingId"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "preferredPrintingId is required."}), 400
+
+    group = next(
+        (item for item in deck_token_groups(deck) if item["tokenOracleId"] == token_oracle_id),
+        None,
+    )
+    if group is None:
+        return jsonify({"error": "That token is not created by this deck."}), 404
+    if printing_id not in {version["printingId"] for version in group["versions"]}:
+        return jsonify({"error": "That printing is not a version of this token."}), 400
+
+    preference = DeckTokenPreference.query.filter_by(
+        deckId=deck.id,
+        tokenOracleId=token_oracle_id,
+    ).first()
+    if preference is None:
+        preference = DeckTokenPreference(
+            deckId=deck.id,
+            tokenOracleId=token_oracle_id,
+            preferredPrintingId=printing_id,
+        )
+        db.session.add(preference)
+    else:
+        preference.preferredPrintingId = printing_id
+    db.session.commit()
+    refreshed = next(
+        item for item in deck_token_groups(deck) if item["tokenOracleId"] == token_oracle_id
+    )
+    return jsonify(refreshed)
 
 
 @api_bp.post("/decks/<int:deck_id>/used")
 def mark_deck_used(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id)
     deck.lastUsedAt = utcnow()
     db.session.commit()
     return jsonify(serialize_deck(deck, include_cards=False))
@@ -1851,7 +2103,7 @@ def mark_deck_used(deck_id: int):
 
 @api_bp.patch("/decks/<int:deck_id>")
 def update_deck(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id, edit=True)
     payload = request.get_json(silent=True) or {}
 
     if "name" in payload:
@@ -1886,7 +2138,8 @@ def update_deck(deck_id: int):
 
 @api_bp.put("/decks/<int:deck_id>/commanders")
 def replace_deck_commanders(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
     payload = request.get_json(silent=True) or {}
     raw_ids = payload.get("commanderCardIds")
     if not isinstance(raw_ids, list):
@@ -1966,21 +2219,23 @@ def replace_deck_commanders(deck_id: int):
         )
 
     sync_deck_commander_count(deck)
+    finish_edit(deck)
     db.session.commit()
     return jsonify(serialize_deck(deck, include_cards=True))
 
 
 @api_bp.delete("/decks/<int:deck_id>")
 def delete_deck(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
-    db.session.delete(deck)
+    deck = owned_deck(deck_id)
+    deck.libraryStatus = "archived"
     db.session.commit()
     return jsonify({"ok": True, "deckId": deck_id})
 
 
 @api_bp.post("/decks/<int:deck_id>/cards")
 def add_card_to_deck(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
     payload = request.get_json(silent=True) or {}
 
     card_id = payload.get("cardId")
@@ -2002,6 +2257,8 @@ def add_card_to_deck(deck_id: int):
     board_type = (payload.get("boardType") or "main").strip()
     is_commander = bool(payload.get("isCommander", False))
     preferred_printing_id = payload.get("preferredPrintingId")
+    if preferred_printing_id is not None and not Printing.query.filter_by(id=preferred_printing_id, cardId=card.id).first():
+        return jsonify(error="Printing does not belong to this card"), 400
     if is_commander:
         if not card_can_be_commander(card):
             return jsonify({"error": "That card is not eligible to be a commander."}), 400
@@ -2032,6 +2289,7 @@ def add_card_to_deck(deck_id: int):
         if is_commander:
             existing_entry.isCommander = True
         sync_deck_commander_count(deck)
+        finish_edit(deck)
         db.session.commit()
         return jsonify(serialize_deck_card(existing_entry)), 200
 
@@ -2046,19 +2304,24 @@ def add_card_to_deck(deck_id: int):
 
     db.session.add(deck_card)
     sync_deck_commander_count(deck)
+    finish_edit(deck)
     db.session.commit()
 
     return jsonify(serialize_deck_card(deck_card)), 201
 
 
-@api_bp.patch("/decks/<int:deck_id>/cards/<int:deck_card_id>")
-def update_deck_card(deck_id: int, deck_card_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
-    entry = DeckCard.query.filter_by(id=deck_card_id, deckId=deck.id).first()
+@api_bp.patch("/decks/<int:deck_id>/cards/<string:deck_card_id>")
+def update_deck_card(deck_id: int, deck_card_id: str):
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
+    entry = find_entry(deck, deck_card_id)
     if entry is None:
         return jsonify({"error": "Deck card entry not found."}), 404
 
     payload = request.get_json(silent=True) or {}
+    if payload.get("preferredPrintingId") is not None and not Printing.query.filter_by(
+            id=payload["preferredPrintingId"], cardId=entry.cardId).first():
+        return jsonify(error="Printing does not belong to this card"), 400
     quantity = entry.quantity
     if "quantity" in payload:
         try:
@@ -2112,23 +2375,26 @@ def update_deck_card(deck_id: int, deck_card_id: int):
             entry.preferredPrintingId = payload.get("preferredPrintingId")
 
     sync_deck_commander_count(deck)
+    finish_edit(deck)
     db.session.commit()
     return jsonify(serialize_deck(deck, include_cards=True))
 
 
-@api_bp.delete("/decks/<int:deck_id>/cards/<int:deck_card_id>")
-def remove_card_from_deck(deck_id: int, deck_card_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+@api_bp.delete("/decks/<int:deck_id>/cards/<string:deck_card_id>")
+def remove_card_from_deck(deck_id: int, deck_card_id: str):
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
 
-    deck_card = DeckCard.query.filter_by(id=deck_card_id, deckId=deck.id).first()
+    deck_card = find_entry(deck, deck_card_id)
     if deck_card is None:
         return jsonify({"error": "Deck card entry not found."}), 404
 
     db.session.delete(deck_card)
     sync_deck_commander_count(deck)
+    finish_edit(deck)
     db.session.commit()
 
-    return jsonify({"ok": True, "deletedDeckCardId": deck_card_id})
+    return jsonify({"ok": True, "deletedDeckCardId": deck_card.id})
 
 
 def parse_deck_list_line(line: str) -> dict[str, Any] | None:
@@ -2200,7 +2466,8 @@ def resolve_deck_list_card(parsed: dict[str, Any]) -> tuple[Card | None, Printin
 
 @api_bp.post("/decks/<int:deck_id>/cards/bulk")
 def bulk_add_deck_cards(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
     payload = request.get_json(silent=True) or {}
     board_type = (payload.get("boardType") or "main").strip().lower()
     mode = (payload.get("mode") or "merge").strip().lower()
@@ -2263,6 +2530,7 @@ def bulk_add_deck_cards(deck_id: int):
             )
         imported_quantity += parsed["quantity"]
 
+    finish_edit(deck)
     db.session.commit()
     return jsonify(
         {
@@ -2279,7 +2547,8 @@ def bulk_add_deck_cards(deck_id: int):
 
 @api_bp.post("/decks/<int:deck_id>/boards/swap")
 def swap_deck_board(deck_id: int):
-    deck = Deck.query.filter_by(id=deck_id).first_or_404()
+    deck = owned_deck(deck_id, edit=True)
+    prepare_edit(deck)
     payload = request.get_json(silent=True) or {}
     source = (payload.get("sourceBoard") or "").strip().lower()
     target = (payload.get("targetBoard") or "").strip().lower()
@@ -2307,6 +2576,7 @@ def swap_deck_board(deck_id: int):
             entry.boardType = target
         moved_quantity += entry.quantity
 
+    finish_edit(deck)
     db.session.commit()
     return jsonify(
         {
@@ -2375,7 +2645,8 @@ def create_game():
                 "seatNumber": 1,
                 "playerType": "human",
                 "deckId": host_deck_id,
-                "userId": payload.get("userId"),
+                "userId": current_user_id(),
+                "deckVersionId": payload.get("hostDeckVersionId") or payload.get("revision"),
             }
         ]
         for seat_number in range(2, player_count + 1):
@@ -2401,7 +2672,7 @@ def create_game():
         ruleset=ruleset,
         maxPlayers=player_count,
         passwordHash=generate_password_hash(password) if password else None,
-        hostUserId=payload.get("userId"),
+        hostUserId=current_user_id(),
         startedAt=utcnow() if game_status == "active" else None,
         notes=payload.get("notes"),
         engineVersion=payload.get("engineVersion") or "pre-rules-engine",
@@ -2418,16 +2689,18 @@ def create_game():
             if selected_deck is None:
                 db.session.rollback()
                 return jsonify({"error": f"Deck {deck_id} was not found."}), 404
+            selected_deck = owned_deck(deck_id)
+            selected_revision = select_revision(selected_deck, player_payload.get("deckVersionId") or player_payload.get("revision"))
             selected_deck.lastUsedAt = utcnow()
 
         player = GamePlayer(
             gameId=game.id,
             seatNumber=int(player_payload.get("seatNumber") or index),
             playerType=player_payload.get("playerType") or "human",
-            userId=player_payload.get("userId"),
+            userId=current_user_id() if deck_id is not None else None,
             aiProfile=player_payload.get("aiProfile"),
             deckId=deck_id,
-            deckVersionId=player_payload.get("deckVersionId"),
+            deckVersionId=selected_revision.id if deck_id is not None else None,
             startingLife=int(player_payload.get("startingLife") or 40),
             startingHandSize=int(player_payload.get("startingHandSize") or 7),
             isReady=False,
@@ -2518,17 +2791,33 @@ def _seed_game_from_decks(game: Game) -> None:
         if not player.deckId:
             continue
 
-        deck_cards = cast(
-            list[DeckCard],
-            DeckCard.query.filter_by(deckId=player.deckId)
-            .order_by(cast(Any, DeckCard.id).asc())
-            .all(),
+        if player.deckVersionId is not None:
+            version = db.session.get(DeckVersion, player.deckVersionId)
+            if version is None or version.deckId != player.deckId:
+                raise ValueError("Invalid game deck revision")
+            deck_cards = revision_entries(version, player.deckId)
+        else:
+            # Legacy games without a pinned version retain their existing behavior.
+            deck_cards = DeckCard.query.filter_by(deckId=player.deckId).order_by(DeckCard.id).all()
+
+        deck = db.session.get(Deck, player.deckId)
+        player.tokenSelections = (
+            deck_token_groups(
+                deck,
+                entries=deck_cards,
+                version=version if player.deckVersionId is not None else None,
+                include_versions=False,
+            )
+            if deck is not None
+            else []
         )
 
         library_entries: list[tuple[int, int | None]] = []
         command_entries: list[tuple[int, int | None]] = []
 
         for deck_card in deck_cards:
+            if deck_card.boardType not in {"main", "command"}:
+                continue
             preferred_printing_id = deck_card.preferredPrintingId or _first_printing_id_for_card(deck_card.cardId)
 
             for _ in range(deck_card.quantity):
@@ -2626,6 +2915,8 @@ def join_game(game_id: int):
     deck = Deck.query.filter_by(id=deck_id).first()
     if deck is None:
         return jsonify({"error": f"Deck {deck_id} was not found."}), 404
+    deck = owned_deck(deck_id)
+    selected_revision = select_revision(deck, payload.get("deckVersionId") or payload.get("revision"))
     deck.lastUsedAt = utcnow()
 
     players = sorted(cast(list[GamePlayer], game.players or []), key=lambda player: player.seatNumber)
@@ -2658,10 +2949,10 @@ def join_game(game_id: int):
         return jsonify({"error": "No open seats remain in this game."}), 400
 
     open_player.deckId = deck_id
+    open_player.deckVersionId = selected_revision.id
+    open_player.userId = current_user_id()
     open_player.isReady = False
     open_player.lobbyTokenHash = generate_password_hash(participant_token) if participant_token else None
-    if payload.get("userId") is not None:
-        open_player.userId = payload.get("userId")
 
     db.session.commit()
 

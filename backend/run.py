@@ -6,148 +6,17 @@ app = create_app()
 
 
 def initialize_database() -> None:
-    """Create the PostgreSQL schemas and any tables missing from this database."""
+    """Apply the migration ledger before starting the development server.
+
+    An unversioned populated database must be reviewed explicitly; never stamp
+    it automatically or treat create_all() as an existing-schema migration.
+    """
+    from pathlib import Path
+    from flask_migrate import upgrade
+
     with app.app_context():
+        upgrade(directory=str(Path(__file__).resolve().parent / "migrations"))
         with db.engine.begin() as connection:
-            for schema in ("mtgCore", "mtgDecks", "mtgGames", "mtgAnalysis"):
-                connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-
-        db.create_all()
-
-        with db.engine.begin() as connection:
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "lobbyName" TEXT'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS ruleset TEXT NOT NULL DEFAULT \'casual\''
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "maxPlayers" INTEGER NOT NULL DEFAULT 4'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "passwordHash" TEXT'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "hostUserId" BIGINT'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "turnNumber" INTEGER NOT NULL DEFAULT 1'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames".games '
-                    'ADD COLUMN IF NOT EXISTS "activeSeatNumber" INTEGER NOT NULL DEFAULT 1'
-                )
-            )
-            connection.execute(
-                text(
-                    'CREATE INDEX IF NOT EXISTS "ix_games_lobby_name" '
-                    'ON "mtgGames".games ("lobbyName")'
-                )
-            )
-            connection.execute(
-                text(
-                    'CREATE INDEX IF NOT EXISTS "ix_games_ruleset" '
-                    'ON "mtgGames".games (ruleset)'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "isReady" BOOLEAN NOT NULL DEFAULT FALSE'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "isHost" BOOLEAN NOT NULL DEFAULT FALSE'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "lobbyTokenHash" TEXT'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "isConnected" BOOLEAN NOT NULL DEFAULT FALSE'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "disconnectedAt" TIMESTAMPTZ'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."gamePlayers" '
-                    'ADD COLUMN IF NOT EXISTS "sleeveStyle" TEXT NOT NULL DEFAULT \'classic\''
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgGames"."cardInstances" '
-                    'ADD COLUMN IF NOT EXISTS "isCommander" BOOLEAN NOT NULL DEFAULT FALSE'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgDecks".decks '
-                    'ADD COLUMN IF NOT EXISTS "lastUsedAt" TIMESTAMPTZ'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgDecks".decks '
-                    'ADD COLUMN IF NOT EXISTS "folderName" TEXT'
-                )
-            )
-            connection.execute(
-                text(
-                    'ALTER TABLE "mtgDecks".decks '
-                    'ADD COLUMN IF NOT EXISTS "commanderBracket" INTEGER'
-                )
-            )
-            connection.execute(
-                text(
-                    'CREATE INDEX IF NOT EXISTS "ix_decks_folder_name" '
-                    'ON "mtgDecks".decks ("folderName")'
-                )
-            )
-            connection.execute(
-                text(
-                    'CREATE INDEX IF NOT EXISTS "ix_decks_last_used_at" '
-                    'ON "mtgDecks".decks ("lastUsedAt")'
-                )
-            )
-            connection.execute(
-                text(
-                    'UPDATE "mtgGames"."cardInstances" '
-                    'SET "isCommander" = TRUE '
-                    'WHERE zone = \'command\' AND "isCommander" = FALSE'
-                )
-            )
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             connection.execute(
                 text(

@@ -6,7 +6,13 @@ from app.extensions import db
 
 class Deck(db.Model):
     __tablename__ = "decks"
-    __table_args__ = {"schema": "mtgDecks"}
+    __table_args__ = (
+        db.Index("uq_deck_primary_precon", "ownerUserId", "sourcePreconId", unique=True,
+                 postgresql_where=db.text('"isPrimaryPreconInstance"'),
+                 sqlite_where=db.text('"isPrimaryPreconInstance"')),
+        db.CheckConstraint("\"libraryStatus\" IN ('unlisted', 'saved', 'archived')", name="ck_deck_library_status"),
+        {"schema": "mtgDecks"},
+    )
 
     id = db.Column(db.BigInteger, primary_key=True)
     name = db.Column(db.Text, nullable=False, index=True)
@@ -17,6 +23,16 @@ class Deck(db.Model):
     colorIdentity = db.Column(db.ARRAY(db.Text))
 
     ownerUserId = db.Column(db.BigInteger, index=True, nullable=True)
+
+    sourcePreconId = db.Column(db.BigInteger, db.ForeignKey("mtgDecks.precon_templates.id"), index=True)
+    sourcePreconVersionId = db.Column(db.BigInteger, db.ForeignKey("mtgDecks.precon_template_versions.id"))
+    libraryStatus = db.Column(db.Text, nullable=False, default="saved", server_default="saved", index=True)
+    isPrimaryPreconInstance = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    addedToLibraryAt = db.Column(db.DateTime(timezone=True))
+    currentVersionId = db.Column(db.BigInteger, db.ForeignKey(
+        "mtgDecks.deckVersions.id", use_alter=True, name="fk_deck_current_version"))
+    currentVersion = db.relationship("DeckVersion", foreign_keys=[currentVersionId], post_update=True)
+    sourcePrecon = db.relationship("PreconTemplate", foreign_keys=[sourcePreconId])
 
     sourceType = db.Column(db.Text, default="custom", index=True)
     sourceProductId = db.Column(
@@ -46,6 +62,14 @@ class Deck(db.Model):
         lazy=True,
         cascade="all, delete-orphan",
         foreign_keys="DeckCard.deckId",
+    )
+
+    tokenPreferences = db.relationship(
+        "DeckTokenPreference",
+        back_populates="deck",
+        lazy=True,
+        cascade="all, delete-orphan",
+        foreign_keys="DeckTokenPreference.deckId",
     )
 
     versions = db.relationship(
@@ -169,6 +193,50 @@ class DeckCard(db.Model):
         self.isCommander = isCommander
 
 
+class DeckTokenPreference(db.Model):
+    """The printing a deck uses when it creates a particular kind of token."""
+
+    __tablename__ = "deckTokenPreferences"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "deckId",
+            "tokenOracleId",
+            name="uq_deckTokenPreferences_deck_oracle",
+        ),
+        {"schema": "mtgDecks"},
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    deckId = db.Column(
+        db.BigInteger,
+        db.ForeignKey("mtgDecks.decks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tokenOracleId = db.Column(db.Text, nullable=False, index=True)
+    preferredPrintingId = db.Column(
+        db.BigInteger,
+        db.ForeignKey("mtgCore.printings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    createdAt = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updatedAt = db.Column(
+        db.DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    deck = db.relationship("Deck", back_populates="tokenPreferences", lazy=True)
+    preferredPrinting = db.relationship("Printing", lazy=True)
+
+    def __init__(self, *, deckId, tokenOracleId, preferredPrintingId):
+        self.deckId = deckId
+        self.tokenOracleId = tokenOracleId
+        self.preferredPrintingId = preferredPrintingId
+
+
 class DeckVersion(db.Model):
     __tablename__ = "deckVersions"
     __table_args__ = (
@@ -184,6 +252,11 @@ class DeckVersion(db.Model):
         nullable=False,
         index=True,
     )
+
+    basePreconVersionId = db.Column(db.BigInteger, db.ForeignKey("mtgDecks.precon_template_versions.id"))
+    revisionType = db.Column(db.Text, nullable=False, default="custom", server_default="custom")
+    contentHash = db.Column(db.String(64))
+    basePreconVersion = db.relationship("PreconTemplateVersion", foreign_keys=[basePreconVersionId])
 
     versionNumber = db.Column(db.Integer, nullable=False)
     label = db.Column(db.Text)

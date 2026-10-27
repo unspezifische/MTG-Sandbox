@@ -2,8 +2,8 @@ Flask
 Flask-SQLAlchemy
 Flask-Migrate
 flask_socketio
-gevent
-gevent-websocket
+gevent==24.10.3
+gevent-websocket==0.10.1
 psycopg2-binary
 SQLAlchemy
 requests

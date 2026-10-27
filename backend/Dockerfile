@@ -17,4 +17,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . ./
 
 EXPOSE 5000
-CMD ["python", "run.py"]
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
+CMD ["gunicorn", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "--workers", "1", "--bind", "0.0.0.0:5000", "run:app"]

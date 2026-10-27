@@ -11,8 +11,10 @@ WorkingDirectory=/home/pi/MtG-webapp/backend
 Environment="PATH=/home/pi/MtG-webapp/.venv/bin"
 EnvironmentFile=-/etc/default/mtg-sandbox-backend
 
-# Socket.IO support is provided via eventlet worker.
-ExecStart=/home/pi/MtG-webapp/.venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 127.0.0.1:5050 run:app
+# A single gevent-websocket worker keeps Engine.IO polling sessions on the
+# process that owns them. Scaling beyond one worker requires sticky routing
+# and a shared Socket.IO message queue.
+ExecStart=/home/pi/MtG-webapp/.venv/bin/gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers 1 --bind 127.0.0.1:5050 run:app
 Restart=always
 RestartSec=3
 TimeoutStopSec=30

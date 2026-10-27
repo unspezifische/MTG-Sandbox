@@ -114,9 +114,6 @@ def upgrade():
     sa.Column('commanderCastCount', sa.Integer(), nullable=True),
     sa.Column('commanderDamageDealt', sa.Integer(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['deckVersionId'], ['mtgDecks.deckVersions.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['gameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('gameId', 'seatNumber', name='uq_gamePlayers_game_seat'),
     schema='mtgGames'
@@ -147,9 +144,6 @@ def upgrade():
     sa.Column('winnerGamePlayerId', sa.BigInteger(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['parentGameId'], ['mtgGames.games.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['parentSnapshotId'], ['mtgGames.stateSnapshots.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['winnerGamePlayerId'], ['mtgGames.gamePlayers.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -171,7 +165,6 @@ def upgrade():
     sa.Column('stateJson', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('snapshotHash', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['gameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -191,7 +184,6 @@ def upgrade():
     sa.Column('source', sa.Text(), nullable=True),
     sa.Column('confidence', sa.Numeric(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -211,7 +203,6 @@ def upgrade():
     sa.Column('source', sa.Text(), nullable=True),
     sa.Column('confidence', sa.Numeric(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -237,7 +228,6 @@ def upgrade():
     sa.Column('colors', sa.ARRAY(sa.Text()), nullable=True),
     sa.Column('identifiers', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('rawJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgCore'
     )
@@ -262,8 +252,6 @@ def upgrade():
     sa.Column('identifiers', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('rawJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['setId'], ['mtgCore.sets.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgCore'
     )
@@ -282,7 +270,6 @@ def upgrade():
     sa.Column('releaseDate', sa.Date(), nullable=True),
     sa.Column('rawJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['setId'], ['mtgCore.sets.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgCore'
     )
@@ -301,9 +288,6 @@ def upgrade():
     sa.Column('branchReason', sa.Text(), nullable=True),
     sa.Column('createdByUserId', sa.BigInteger(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['childGameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['parentGameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['parentSnapshotId'], ['mtgGames.stateSnapshots.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -326,8 +310,6 @@ def upgrade():
     sa.Column('payloadJson', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('publicText', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['actingGamePlayerId'], ['mtgGames.gamePlayers.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['gameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('gameId', 'sequenceNumber', name='uq_events_game_sequence'),
     schema='mtgGames'
@@ -347,7 +329,6 @@ def upgrade():
     sa.Column('zoneScope', sa.Text(), nullable=False),
     sa.Column('orderedCardInstanceIds', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['gamePlayerId'], ['mtgGames.gamePlayers.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -371,7 +352,6 @@ def upgrade():
     sa.Column('downloadedAt', sa.DateTime(timezone=True), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updatedAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['printingId'], ['mtgCore.printings.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('printingId', 'faceName', 'imageSize', name='uq_printingImages_printing_face_size'),
     schema='mtgCore'
@@ -391,8 +371,6 @@ def upgrade():
     sa.Column('isCommander', sa.Boolean(), nullable=True),
     sa.Column('boardSection', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['productId'], ['mtgCore.products.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('productId', 'cardId', 'boardSection', name='uq_productContents_product_card_board'),
     schema='mtgCore'
@@ -415,7 +393,6 @@ def upgrade():
     sa.Column('isPublic', sa.Boolean(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updatedAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['sourceProductId'], ['mtgCore.products.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgDecks'
     )
@@ -441,10 +418,6 @@ def upgrade():
     sa.Column('decisionSource', sa.Text(), nullable=False),
     sa.Column('timeTakenMs', sa.Integer(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['actionTakenEventId'], ['mtgGames.events.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['gameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['gamePlayerId'], ['mtgGames.gamePlayers.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['snapshotId'], ['mtgGames.stateSnapshots.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -466,9 +439,6 @@ def upgrade():
     sa.Column('boardType', sa.Text(), nullable=False),
     sa.Column('isCommander', sa.Boolean(), nullable=True),
     sa.Column('addedAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['preferredPrintingId'], ['mtgCore.printings.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('deckId', 'cardId', 'boardType', name='uq_deckCards_deck_card_board'),
     schema='mtgDecks'
@@ -485,7 +455,6 @@ def upgrade():
     sa.Column('importSource', sa.Text(), nullable=True),
     sa.Column('originalPayload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('importedAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgDecks'
     )
@@ -501,7 +470,6 @@ def upgrade():
     sa.Column('source', sa.Text(), nullable=True),
     sa.Column('confidence', sa.Numeric(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgDecks'
     )
@@ -518,7 +486,6 @@ def upgrade():
     sa.Column('label', sa.Text(), nullable=True),
     sa.Column('changeSummary', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('deckId', 'versionNumber', name='uq_deckVersions_deck_version'),
     schema='mtgDecks'
@@ -532,8 +499,6 @@ def upgrade():
     sa.Column('deckVersionId', sa.BigInteger(), nullable=True),
     sa.Column('summaryJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['deckVersionId'], ['mtgDecks.deckVersions.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -551,8 +516,6 @@ def upgrade():
     sa.Column('configJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('resultSummaryJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckId'], ['mtgDecks.decks.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['deckVersionId'], ['mtgDecks.deckVersions.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -570,9 +533,6 @@ def upgrade():
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('boardType', sa.Text(), nullable=False),
     sa.Column('isCommander', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['deckVersionId'], ['mtgDecks.deckVersions.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['preferredPrintingId'], ['mtgCore.printings.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('deckVersionId', 'cardId', 'boardType', name='uq_deckVersionCards_version_card_board'),
     schema='mtgDecks'
@@ -593,12 +553,6 @@ def upgrade():
     sa.Column('createdByEventId', sa.BigInteger(), nullable=True),
     sa.Column('metadataJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['cardId'], ['mtgCore.cards.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['createdByEventId'], ['mtgGames.events.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['gameId'], ['mtgGames.games.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['gamePlayerId'], ['mtgGames.gamePlayers.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['printingId'], ['mtgCore.printings.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['sourceDeckCardId'], ['mtgDecks.deckCards.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgGames'
     )
@@ -619,7 +573,6 @@ def upgrade():
     sa.Column('confidence', sa.Numeric(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckSnapshotId'], ['mtgAnalysis.deckSnapshots.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -637,7 +590,6 @@ def upgrade():
     sa.Column('metricValueText', sa.Text(), nullable=True),
     sa.Column('metricValueJson', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('createdAt', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['deckSnapshotId'], ['mtgAnalysis.deckSnapshots.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='mtgAnalysis'
     )
@@ -647,11 +599,109 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_mtgAnalysis_deckMetrics_metricGroup'), ['metricGroup'], unique=False)
         batch_op.create_index(batch_op.f('ix_mtgAnalysis_deckMetrics_metricName'), ['metricName'], unique=False)
 
+    # Forward/circular references require all tables to exist before adding FKs.
+    op.create_foreign_key('fk_initial_gamePlayers_deckId', 'gamePlayers', 'decks', ['deckId'], ['id'], source_schema='mtgGames', referent_schema='mtgDecks', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_gamePlayers_deckVersionId', 'gamePlayers', 'deckVersions', ['deckVersionId'], ['id'], source_schema='mtgGames', referent_schema='mtgDecks', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_gamePlayers_gameId', 'gamePlayers', 'games', ['gameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_games_parentGameId', 'games', 'games', ['parentGameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_games_parentSnapshotId', 'games', 'stateSnapshots', ['parentSnapshotId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_games_winnerGamePlayerId', 'games', 'gamePlayers', ['winnerGamePlayerId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_stateSnapshots_gameId', 'stateSnapshots', 'games', ['gameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_cardMatchupTags_cardId', 'cardMatchupTags', 'cards', ['cardId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_cardRoleTags_cardId', 'cardRoleTags', 'cards', ['cardId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_cardFaces_cardId', 'cardFaces', 'cards', ['cardId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_printings_cardId', 'printings', 'cards', ['cardId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_printings_setId', 'printings', 'sets', ['setId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_products_setId', 'products', 'sets', ['setId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_branches_childGameId', 'branches', 'games', ['childGameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_branches_parentGameId', 'branches', 'games', ['parentGameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_branches_parentSnapshotId', 'branches', 'stateSnapshots', ['parentSnapshotId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_events_actingGamePlayerId', 'events', 'gamePlayers', ['actingGamePlayerId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_events_gameId', 'events', 'games', ['gameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_gamePlayerLibraries_gamePlayerId', 'gamePlayerLibraries', 'gamePlayers', ['gamePlayerId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_printingImages_printingId', 'printingImages', 'printings', ['printingId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_productContents_cardId', 'productContents', 'cards', ['cardId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_productContents_productId', 'productContents', 'products', ['productId'], ['id'], source_schema='mtgCore', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_decks_sourceProductId', 'decks', 'products', ['sourceProductId'], ['id'], source_schema='mtgDecks', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_decisions_actionTakenEventId', 'decisions', 'events', ['actionTakenEventId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_decisions_gameId', 'decisions', 'games', ['gameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_decisions_gamePlayerId', 'decisions', 'gamePlayers', ['gamePlayerId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_decisions_snapshotId', 'decisions', 'stateSnapshots', ['snapshotId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_deckCards_cardId', 'deckCards', 'cards', ['cardId'], ['id'], source_schema='mtgDecks', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckCards_deckId', 'deckCards', 'decks', ['deckId'], ['id'], source_schema='mtgDecks', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckCards_preferredPrintingId', 'deckCards', 'printings', ['preferredPrintingId'], ['id'], source_schema='mtgDecks', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_deckImports_deckId', 'deckImports', 'decks', ['deckId'], ['id'], source_schema='mtgDecks', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckTags_deckId', 'deckTags', 'decks', ['deckId'], ['id'], source_schema='mtgDecks', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckVersions_deckId', 'deckVersions', 'decks', ['deckId'], ['id'], source_schema='mtgDecks', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckSnapshots_deckId', 'deckSnapshots', 'decks', ['deckId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckSnapshots_deckVersionId', 'deckSnapshots', 'deckVersions', ['deckVersionId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgDecks', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_simulationRuns_deckId', 'simulationRuns', 'decks', ['deckId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_simulationRuns_deckVersionId', 'simulationRuns', 'deckVersions', ['deckVersionId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgDecks', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_deckVersionCards_cardId', 'deckVersionCards', 'cards', ['cardId'], ['id'], source_schema='mtgDecks', referent_schema='mtgCore', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckVersionCards_deckVersionId', 'deckVersionCards', 'deckVersions', ['deckVersionId'], ['id'], source_schema='mtgDecks', referent_schema='mtgDecks', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckVersionCards_preferredPrintingId', 'deckVersionCards', 'printings', ['preferredPrintingId'], ['id'], source_schema='mtgDecks', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_cardInstances_cardId', 'cardInstances', 'cards', ['cardId'], ['id'], source_schema='mtgGames', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_cardInstances_createdByEventId', 'cardInstances', 'events', ['createdByEventId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_cardInstances_gameId', 'cardInstances', 'games', ['gameId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_cardInstances_gamePlayerId', 'cardInstances', 'gamePlayers', ['gamePlayerId'], ['id'], source_schema='mtgGames', referent_schema='mtgGames', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_cardInstances_printingId', 'cardInstances', 'printings', ['printingId'], ['id'], source_schema='mtgGames', referent_schema='mtgCore', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_cardInstances_sourceDeckCardId', 'cardInstances', 'deckCards', ['sourceDeckCardId'], ['id'], source_schema='mtgGames', referent_schema='mtgDecks', ondelete='SET NULL')
+    op.create_foreign_key('fk_initial_deckMatchupProfiles_deckSnapshotId', 'deckMatchupProfiles', 'deckSnapshots', ['deckSnapshotId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgAnalysis', ondelete='CASCADE')
+    op.create_foreign_key('fk_initial_deckMetrics_deckSnapshotId', 'deckMetrics', 'deckSnapshots', ['deckSnapshotId'], ['id'], source_schema='mtgAnalysis', referent_schema='mtgAnalysis', ondelete='CASCADE')
+
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_constraint('fk_initial_gamePlayers_deckId', 'gamePlayers', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_gamePlayers_deckVersionId', 'gamePlayers', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_gamePlayers_gameId', 'gamePlayers', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_games_parentGameId', 'games', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_games_parentSnapshotId', 'games', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_games_winnerGamePlayerId', 'games', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_stateSnapshots_gameId', 'stateSnapshots', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardMatchupTags_cardId', 'cardMatchupTags', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardRoleTags_cardId', 'cardRoleTags', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardFaces_cardId', 'cardFaces', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_printings_cardId', 'printings', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_printings_setId', 'printings', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_products_setId', 'products', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_branches_childGameId', 'branches', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_branches_parentGameId', 'branches', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_branches_parentSnapshotId', 'branches', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_events_actingGamePlayerId', 'events', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_events_gameId', 'events', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_gamePlayerLibraries_gamePlayerId', 'gamePlayerLibraries', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_printingImages_printingId', 'printingImages', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_productContents_cardId', 'productContents', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_productContents_productId', 'productContents', schema='mtgCore', type_='foreignkey')
+    op.drop_constraint('fk_initial_decks_sourceProductId', 'decks', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_decisions_actionTakenEventId', 'decisions', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_decisions_gameId', 'decisions', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_decisions_gamePlayerId', 'decisions', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_decisions_snapshotId', 'decisions', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckCards_cardId', 'deckCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckCards_deckId', 'deckCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckCards_preferredPrintingId', 'deckCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckImports_deckId', 'deckImports', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckTags_deckId', 'deckTags', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckVersions_deckId', 'deckVersions', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckSnapshots_deckId', 'deckSnapshots', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckSnapshots_deckVersionId', 'deckSnapshots', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_simulationRuns_deckId', 'simulationRuns', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_simulationRuns_deckVersionId', 'simulationRuns', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckVersionCards_cardId', 'deckVersionCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckVersionCards_deckVersionId', 'deckVersionCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckVersionCards_preferredPrintingId', 'deckVersionCards', schema='mtgDecks', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_cardId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_createdByEventId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_gameId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_gamePlayerId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_printingId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_cardInstances_sourceDeckCardId', 'cardInstances', schema='mtgGames', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckMatchupProfiles_deckSnapshotId', 'deckMatchupProfiles', schema='mtgAnalysis', type_='foreignkey')
+    op.drop_constraint('fk_initial_deckMetrics_deckSnapshotId', 'deckMetrics', schema='mtgAnalysis', type_='foreignkey')
     with op.batch_alter_table('deckMetrics', schema='mtgAnalysis') as batch_op:
         batch_op.drop_index(batch_op.f('ix_mtgAnalysis_deckMetrics_metricName'))
         batch_op.drop_index(batch_op.f('ix_mtgAnalysis_deckMetrics_metricGroup'))

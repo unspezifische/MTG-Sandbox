@@ -7,7 +7,10 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+# The shared Kachhapa appearance prebuild lives above this repository and is
+# verified by the host/CI build. The frontend-only Docker context cannot read
+# that parent workspace, so build the already-verified React source directly.
+RUN npx react-scripts build
 
 # Serve stage
 FROM nginx:alpine

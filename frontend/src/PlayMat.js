@@ -1,4 +1,6 @@
+import {localCardImage, scryfallImageUrl} from './cardImages';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ManaCost, ManaText } from "./ManaSymbols";
 import { io } from "socket.io-client";
 
 const isMtgSubpath = window.location.pathname.startsWith("/mtg");
@@ -43,7 +45,7 @@ function CardBack({ sleeveStyle = "classic", label = "Card back" }) {
 }
 
 function cardImage(cardInstance) {
-    return (
+    return localCardImage(
         cardInstance?.card?.imageNormal ||
         cardInstance?.card?.imageSmall ||
         null
@@ -119,13 +121,13 @@ function BattlefieldCard({
         >
             <div
                 style={{
-                    border: isSelected ? "2px solid #60a5fa" : "1px solid #334155",
+                    border: isSelected ? "2px solid var(--info-border)" : "1px solid var(--border-main)",
                     borderRadius: "10px",
                     overflow: "hidden",
-                    background: "#111827",
+                    background: "var(--bg-surface)",
                     boxShadow: isSelected
-                        ? "0 0 0 2px rgba(96,165,250,0.25)"
-                        : "0 4px 12px rgba(0,0,0,0.35)",
+                        ? "0 0 0 2px var(--info-border)"
+                        : "0 4px 12px var(--border-main)",
                 }}
             >
                 {showingBack ? (
@@ -148,7 +150,7 @@ function BattlefieldCard({
                             alignItems: "center",
                             justifyContent: "center",
                             padding: "12px",
-                            color: "#cbd5e1",
+                            color: "var(--text-main)",
                             fontSize: "0.8rem",
                             textAlign: "center",
                         }}
@@ -337,14 +339,14 @@ function HandFan({
                             minWidth: "112px",
                             width: "112px",
                             border: isNew
-                                ? "3px solid #facc15"
-                                : isSelected ? "2px solid #60a5fa" : "1px solid #334155",
+                                ? "3px solid var(--info-border)"
+                                : isSelected ? "2px solid var(--info-border)" : "1px solid var(--border-main)",
                             borderRadius: "10px",
-                            background: "#111827",
+                            background: "var(--bg-surface)",
                             overflow: "hidden",
                             boxShadow: isNew
-                                ? "0 0 0 3px rgba(250,204,21,0.24), 0 4px 16px rgba(0,0,0,0.4)"
-                                : "0 4px 12px rgba(0,0,0,0.3)",
+                                ? "0 0 0 3px var(--info-border), 0 4px 16px var(--border-main)"
+                                : "0 4px 12px var(--border-main)",
                             animation: isNew ? "new-card-glow 1.1s ease-in-out infinite alternate" : "none",
                         }}
                         onClick={(event) => onCardClick(event, card, "hand")}
@@ -368,7 +370,7 @@ function HandFan({
                                     alignItems: "center",
                                     justifyContent: "center",
                                     padding: "10px",
-                                    color: "#cbd5e1",
+                                    color: "var(--text-main)",
                                     fontSize: "0.8rem",
                                     textAlign: "center",
                                 }}
@@ -451,11 +453,11 @@ function HoverCardPreview({ preview }) {
                 {!concealed ? (
                     <>
                         <div className="playmat-hover-meta">
-                            <span>{card?.card?.manaCost || "No mana cost"}</span>
+                            <ManaCost cost={card?.card?.manaCost} empty="No mana cost" />
                             {card?.card?.manaValue != null ? <small>MV {card.card.manaValue}</small> : null}
                         </div>
                         <small>{card?.card?.typeLine || "—"}</small>
-                        <p>{card?.card?.oracleText || "No Oracle text."}</p>
+                        <p><ManaText>{card?.card?.oracleText || "No Oracle text."}</ManaText></p>
                     </>
                 ) : (
                     <p>This card's identity is hidden.</p>
@@ -810,6 +812,7 @@ export default function PlayMat({
     const [selectedCardIds, setSelectedCardIds] = useState(new Set());
     const [selectionBox, setSelectionBox] = useState(null);
     const [randomizerOpen, setRandomizerOpen] = useState(false);
+    const [tokenTrayOpen, setTokenTrayOpen] = useState(false);
     const [customDieSides, setCustomDieSides] = useState(6);
     const [randomCount, setRandomCount] = useState(1);
     const [draggingHandCardId, setDraggingHandCardId] = useState(null);
@@ -1338,6 +1341,22 @@ export default function PlayMat({
             y: clamp(height * 0.32 + offset / 2, height - cardHeight),
         };
     }, [battlefieldCards]);
+
+    const handleCreateToken = useCallback(async (token) => {
+        if (!activePlayer) return;
+        const position = defaultBattlefieldPosition({ card: token.preferred });
+        try {
+            await postAction({
+                type: "create_token",
+                gamePlayerId: activePlayer.id,
+                tokenOracleId: token.tokenOracleId,
+                battlefieldX: position.x,
+                battlefieldY: position.y,
+            });
+        } catch (err) {
+            setError(err?.message || "Failed to create token.");
+        }
+    }, [activePlayer, defaultBattlefieldPosition, postAction]);
 
     const handleHandDragStart = useCallback((event, card) => {
         event.dataTransfer.effectAllowed = "move";
@@ -1954,6 +1973,14 @@ export default function PlayMat({
                         <button type="button" onClick={() => setRandomizerOpen(true)}>Dice & coins</button>
                         <button
                             type="button"
+                            disabled={!activePlayer?.tokenOptions?.length}
+                            onClick={() => setTokenTrayOpen((open) => !open)}
+                            aria-expanded={tokenTrayOpen}
+                        >
+                            Tokens{activePlayer?.tokenOptions?.length ? ` (${activePlayer.tokenOptions.length})` : ""}
+                        </button>
+                        <button
+                            type="button"
                             className="playmat-reset-layout"
                             onClick={() => setLayout(DEFAULT_PLAYMAT_LAYOUT)}
                             title="Reset adjustable PlayMat sections"
@@ -1977,6 +2004,37 @@ export default function PlayMat({
                         {activePlayer ? `You are Player ${activePlayer.seatNumber}` : ""}
                     </span>
                 </div>
+
+                {tokenTrayOpen && activePlayer?.tokenOptions?.length ? (
+                    <section className="playmat-token-tray" aria-label="Create a token">
+                        <header>
+                            <div>
+                                <strong>Token tray</strong>
+                                <span>Uses the versions selected in this deck’s details.</span>
+                            </div>
+                            <button type="button" onClick={() => setTokenTrayOpen(false)} aria-label="Close token tray">×</button>
+                        </header>
+                        <div>
+                            {activePlayer.tokenOptions.map((token) => (
+                                <button
+                                    type="button"
+                                    key={token.tokenOracleId}
+                                    onClick={() => handleCreateToken(token)}
+                                    disabled={isLoading}
+                                >
+                                    {scryfallImageUrl(token.preferred, "small") ? (
+                                        <img src={scryfallImageUrl(token.preferred, "small")} alt="" />
+                                    ) : <span className="playmat-token-art-placeholder">Token</span>}
+                                    <span>
+                                        <strong>{token.name}</strong>
+                                        <small>{token.power && token.toughness ? `${token.power}/${token.toughness}` : token.typeLine}</small>
+                                    </span>
+                                    <b>+ Create</b>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                ) : null}
 
                 {gameState?.alternateWinConditions?.length ? (
                     <div className="playmat-alt-win-watch">
@@ -2012,9 +2070,9 @@ export default function PlayMat({
                 {error ? (
                     <div
                         style={{
-                            background: "#451a1a",
-                            border: "1px solid #7f1d1d",
-                            color: "#fecaca",
+                            background: "var(--bg-surface-2)",
+                            border: "1px solid var(--border-main)",
+                            color: "var(--text-main)",
                             borderRadius: "10px",
                             padding: "10px 12px",
                         }}
@@ -2050,8 +2108,8 @@ export default function PlayMat({
                         flex: 1,
                         minHeight: 0,
                         background:
-                            "radial-gradient(circle at center, rgba(30,41,59,0.9), rgba(15,23,42,1))",
-                        border: "1px solid #334155",
+                            "radial-gradient(circle at center, var(--bg-surface-2), var(--bg-surface))",
+                        border: "1px solid var(--border-main)",
                         borderRadius: "16px",
                         overflow: "hidden",
                     }}

@@ -1,0 +1,420 @@
+{
+  "meta": {
+    "fixtureSource": "Repository AllPrintings.sqlite setDecks; enriched with cards.name"
+  },
+  "data": {
+    "setCode": "SCD",
+    "code": "SCD",
+    "name": "Draconic Destruction",
+    "type": "Commander Deck",
+    "releaseDate": "2022-12-02",
+    "source": "https://magic.wizards.com/en/news/announcements/starter-commander-decks-decklists-2022-10-20",
+    "sealedProductUuids": [
+      "eda5f16c-19f2-517e-80b7-0a50d48a91d9"
+    ],
+    "sourceSetCodes": [
+      "SCD"
+    ],
+    "mainBoard": [
+      {
+        "uuid": "45041fd6-ee5c-524c-805a-f6c90d18a0f6",
+        "count": 1,
+        "name": "Akoum Hellkite"
+      },
+      {
+        "uuid": "3b8a6214-a838-5d5c-abfb-2b7036ad4782",
+        "count": 1,
+        "name": "Chain Reaction"
+      },
+      {
+        "uuid": "66fcd23d-b5b6-552c-b4cc-24e80fd8dd70",
+        "count": 1,
+        "name": "Crucible of Fire"
+      },
+      {
+        "uuid": "5e9ab0be-516a-51f1-89e0-605e6ad03045",
+        "count": 1,
+        "name": "Demanding Dragon"
+      },
+      {
+        "uuid": "1aac8b95-1f7d-518f-8d50-bfe14bfb1642",
+        "count": 1,
+        "name": "Dragonkin Berserker"
+      },
+      {
+        "uuid": "adb0dcb6-1df2-53cc-83bb-5e92bed1aaec",
+        "count": 1,
+        "name": "Dragonmaster Outcast"
+      },
+      {
+        "uuid": "f383342b-d5a7-59f1-b24d-e1a0c8ce6f04",
+        "count": 1,
+        "name": "Drakuseth, Maw of Flames"
+      },
+      {
+        "uuid": "b0dd06c5-3002-5fc7-bd7b-dbf6ccfb50f6",
+        "count": 1,
+        "name": "Dream Pillager"
+      },
+      {
+        "uuid": "cfdf3c33-fbd4-5be9-bfcd-08d0be0f0cb4",
+        "count": 1,
+        "name": "Flameblast Dragon"
+      },
+      {
+        "uuid": "2843199f-d63d-5b17-a480-259cb78cb6e6",
+        "count": 1,
+        "name": "Hoard-Smelter Dragon"
+      },
+      {
+        "uuid": "10bdfb41-de6c-5cfc-8e4d-fb43f72b2239",
+        "count": 1,
+        "name": "Magmaquake"
+      },
+      {
+        "uuid": "b6be6109-d228-5459-8257-e3a1b0dff226",
+        "count": 1,
+        "name": "Mordant Dragon"
+      },
+      {
+        "uuid": "4c44ee79-8be7-5a43-8e43-ec7d860c6474",
+        "count": 1,
+        "name": "Runehorn Hellkite"
+      },
+      {
+        "uuid": "75b6bef6-3170-566c-89cd-b2d5f5b1807e",
+        "count": 1,
+        "name": "Sarkhan, the Dragonspeaker"
+      },
+      {
+        "uuid": "30b88127-e1f4-5277-ba2d-2477f2b68246",
+        "count": 1,
+        "name": "Scourge of Valkas"
+      },
+      {
+        "uuid": "d9d8b136-7fb8-54b1-b084-072c02620629",
+        "count": 1,
+        "name": "Spit Flame"
+      },
+      {
+        "uuid": "22b8f741-4930-5498-ab76-6b66d23c6757",
+        "count": 1,
+        "name": "Sweltering Suns"
+      },
+      {
+        "uuid": "70aadb09-70f6-59e1-8d99-ef561d9581ba",
+        "count": 1,
+        "name": "Thunderbreak Regent"
+      },
+      {
+        "uuid": "4f8fb1aa-f3f8-50ef-94f8-26a1cfeaa4e3",
+        "count": 1,
+        "name": "Thundermaw Hellkite"
+      },
+      {
+        "uuid": "9f22c8d8-9c35-5b09-8fd2-7cdb20dce244",
+        "count": 1,
+        "name": "Tyrant's Familiar"
+      },
+      {
+        "uuid": "26a73d9a-518a-55df-ac5d-665a344751a7",
+        "count": 1,
+        "name": "Verix Bladewing"
+      },
+      {
+        "uuid": "19b738f5-1c7c-59f9-8bfe-1890eaf462b3",
+        "count": 1,
+        "name": "Foe-Razer Regent"
+      },
+      {
+        "uuid": "9fcb4b42-248d-550f-a232-b81ef11ea328",
+        "count": 1,
+        "name": "Frontier Siege"
+      },
+      {
+        "uuid": "c4b9edc3-39dc-58f6-9474-5fc4941375f9",
+        "count": 1,
+        "name": "Hunter's Prowess"
+      },
+      {
+        "uuid": "a7c974f2-1e9c-5113-9cf9-31f44d3fb955",
+        "count": 1,
+        "name": "Primal Might"
+      },
+      {
+        "uuid": "181d4e58-6f15-5cbf-a473-c304cf8af9c0",
+        "count": 1,
+        "name": "Shamanic Revelation"
+      },
+      {
+        "uuid": "39241d9e-a112-5069-bf3a-3c90e37dcda0",
+        "count": 1,
+        "name": "Clan Defiance"
+      },
+      {
+        "uuid": "40fbcc4a-b27c-534c-9b7c-e201f1a51312",
+        "count": 1,
+        "name": "Harbinger of the Hunt"
+      },
+      {
+        "uuid": "b2a02c11-37bf-5aab-8e2c-b71fed22e843",
+        "count": 1,
+        "name": "Dragon's Hoard"
+      },
+      {
+        "uuid": "871bd6f1-47fa-553a-8c1a-fa42dd7a7a27",
+        "count": 1,
+        "name": "Steel Hellkite"
+      },
+      {
+        "uuid": "f3d77696-28e1-5a5c-9f76-a1049db91d41",
+        "count": 1,
+        "name": "Cinder Glade"
+      },
+      {
+        "uuid": "4ae842a4-69f3-5a0d-a9c3-cab3553aa830",
+        "count": 1,
+        "name": "Game Trail"
+      },
+      {
+        "uuid": "488f624c-32db-5803-b461-ec420abd7270",
+        "count": 1,
+        "name": "Haven of the Spirit Dragon"
+      },
+      {
+        "uuid": "f8a8d65c-7299-53b8-98ec-1b6daff55ba6",
+        "count": 1,
+        "name": "Temple of Abandon"
+      },
+      {
+        "uuid": "0d4eb49a-f10f-5e84-91ff-90c967503551",
+        "count": 1,
+        "name": "Dragon Mage"
+      },
+      {
+        "uuid": "51a63418-92ac-54af-bc89-84b3cc054c50",
+        "count": 1,
+        "name": "Dragon Tempest"
+      },
+      {
+        "uuid": "c7afc810-2580-5e5b-83e3-2c17ae1ca29f",
+        "count": 1,
+        "name": "Dragonlord's Servant"
+      },
+      {
+        "uuid": "977889c9-0ac8-5e9e-a746-76a3569c3d51",
+        "count": 1,
+        "name": "Dragonspeaker Shaman"
+      },
+      {
+        "uuid": "af65ba3d-51e9-5df8-88a0-d2f4ad53d306",
+        "count": 1,
+        "name": "Furnace Whelp"
+      },
+      {
+        "uuid": "0aa0e78d-e9fe-510f-9de4-6ba88a3c8bd5",
+        "count": 1,
+        "name": "Provoke the Trolls"
+      },
+      {
+        "uuid": "b4a64df9-f84b-5124-b5ec-33dd2f3fc799",
+        "count": 1,
+        "name": "Rapacious Dragon"
+      },
+      {
+        "uuid": "7daf2890-8395-5587-8bba-0fdf8fe1d50e",
+        "count": 1,
+        "name": "Unleash Fury"
+      },
+      {
+        "uuid": "2ec8290c-da7e-503a-9f41-d1436473c4e6",
+        "count": 1,
+        "name": "Vandalblast"
+      },
+      {
+        "uuid": "b77573b6-e1d9-5512-ab16-72e1885bfc27",
+        "count": 1,
+        "name": "Beast Within"
+      },
+      {
+        "uuid": "8b0fd69b-373d-50fe-8e26-1c184882caf7",
+        "count": 1,
+        "name": "Blossoming Defense"
+      },
+      {
+        "uuid": "cc06a84d-d24d-5b65-b724-8edbd8c8bd70",
+        "count": 1,
+        "name": "Cultivate"
+      },
+      {
+        "uuid": "d9b6d747-ac65-550c-9fa5-5907e0e76a02",
+        "count": 1,
+        "name": "Drumhunter"
+      },
+      {
+        "uuid": "d3a9503f-3091-5fbf-9324-44885b30ff7b",
+        "count": 1,
+        "name": "Elemental Bond"
+      },
+      {
+        "uuid": "2c6f3c10-210a-595a-a80b-5d2e2374b6ce",
+        "count": 1,
+        "name": "Garruk's Uprising"
+      },
+      {
+        "uuid": "a48ba7dd-7fda-5048-8b78-4aee6c8d5c37",
+        "count": 1,
+        "name": "Harmonize"
+      },
+      {
+        "uuid": "2466e14b-0f6b-5c74-9950-d502aa9125b4",
+        "count": 1,
+        "name": "Hunter's Insight"
+      },
+      {
+        "uuid": "615deffe-dca2-53f8-b4f0-c5307fc23d99",
+        "count": 1,
+        "name": "Loaming Shaman"
+      },
+      {
+        "uuid": "2601a596-bac9-5a1d-89bd-baa9c5c67a57",
+        "count": 1,
+        "name": "Return to Nature"
+      },
+      {
+        "uuid": "aa39db9a-48b8-5cf8-8d11-a36d68e5c04e",
+        "count": 1,
+        "name": "Sakura-Tribe Elder"
+      },
+      {
+        "uuid": "78861489-4b89-5ef1-ae56-f73a4065c6d6",
+        "count": 1,
+        "name": "Draconic Disciple"
+      },
+      {
+        "uuid": "f133c6e4-a25a-536f-828f-290b9f345a92",
+        "count": 1,
+        "name": "Fires of Yavimaya"
+      },
+      {
+        "uuid": "94c604e3-76cb-59ff-a1d5-808650f2c098",
+        "count": 1,
+        "name": "Savage Ventmaw"
+      },
+      {
+        "uuid": "4748b928-367b-502d-85d2-d396c731a004",
+        "count": 1,
+        "name": "Arcane Signet"
+      },
+      {
+        "uuid": "1372aa57-ec2d-5082-9f71-f0100fc4f3a4",
+        "count": 1,
+        "name": "Atarka Monument"
+      },
+      {
+        "uuid": "4b1d1d04-ba36-5352-9e25-e7c24315cfa6",
+        "count": 1,
+        "name": "Commander's Sphere"
+      },
+      {
+        "uuid": "3b08656e-66e0-5dd2-984a-9a2f32a970ae",
+        "count": 1,
+        "name": "Sol Ring"
+      },
+      {
+        "uuid": "e76eacdc-6cf4-500f-85e4-64d23841522c",
+        "count": 1,
+        "name": "Swiftfoot Boots"
+      },
+      {
+        "uuid": "421b7e94-a9d4-56d0-9dac-3cf08d308747",
+        "count": 1,
+        "name": "Talisman of Impulse"
+      },
+      {
+        "uuid": "8343b607-9a9f-53c0-acf3-1f60baeb8241",
+        "count": 1,
+        "name": "Command Tower"
+      },
+      {
+        "uuid": "2a1fe572-4c2d-5fdc-8cbb-47baff115a10",
+        "count": 1,
+        "name": "Kazandu Refuge"
+      },
+      {
+        "uuid": "1f3e08e7-670a-5d16-8377-246493273ca2",
+        "count": 1,
+        "name": "Path of Ancestry"
+      },
+      {
+        "uuid": "25557028-3f52-5c29-a36e-4b9090da1f46",
+        "count": 1,
+        "name": "Rugged Highlands"
+      },
+      {
+        "uuid": "b27d0808-367e-5c86-bf61-8381e4f022cd",
+        "count": 1,
+        "name": "Shivan Oasis"
+      },
+      {
+        "uuid": "5b1b6b5a-513f-5499-961f-371c0ae1dfd7",
+        "count": 1,
+        "name": "Timber Gorge"
+      },
+      {
+        "uuid": "4bfa1119-2a8c-5185-aafc-414b22a36026",
+        "count": 5,
+        "name": "Mountain"
+      },
+      {
+        "uuid": "c5a0139e-8433-5ece-a60f-16a7d5ffdaa8",
+        "count": 5,
+        "name": "Mountain"
+      },
+      {
+        "uuid": "739a7075-8a4e-5934-84a1-8da6048a0f9d",
+        "count": 4,
+        "name": "Mountain"
+      },
+      {
+        "uuid": "48aeeb31-aa91-5e82-bbb6-71866ce05c7a",
+        "count": 4,
+        "name": "Mountain"
+      },
+      {
+        "uuid": "72bf09d6-aa1b-5c6e-9741-d1a1841cc21c",
+        "count": 3,
+        "name": "Forest"
+      },
+      {
+        "uuid": "b4e87865-346c-5eeb-9d22-7f1f316199ab",
+        "count": 3,
+        "name": "Forest"
+      },
+      {
+        "uuid": "8cf286a3-b9f8-590d-82c8-d9f3f5e1b494",
+        "count": 3,
+        "name": "Forest"
+      },
+      {
+        "uuid": "1d8dd20c-8e2d-5ff8-aeb6-871259209ded",
+        "count": 3,
+        "name": "Forest"
+      }
+    ],
+    "sideBoard": [],
+    "commander": [
+      {
+        "uuid": "3e59008e-f448-5a21-9590-2b6817cac3ac",
+        "count": 1,
+        "isFoil": true,
+        "isEtched": true,
+        "name": "Atarka, World Render"
+      }
+    ],
+    "displayCommander": [],
+    "tokens": [],
+    "planes": [],
+    "schemes": []
+  }
+}

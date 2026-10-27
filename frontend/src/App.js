@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import "./App.css";
 
+import { mergePlayDecks, apiErrorMessage } from "./preconApi";
 import Profile from "./Profile";
 import DeckBuilder from "./DeckBuilder";
 import DecksPage from "./DecksPage";
+import PreconsPage from "./PreconsPage";
 import GameLobby from "./GameLobby";
 import PlayMat from "./PlayMat";
 import MatchSetupModal from "./MatchSetupModal";
@@ -15,30 +17,6 @@ const isMtgSubpath = window.location.pathname.startsWith("/mtg");
 const API_BASE = isMtgSubpath ? "/mtg/api" : "/api";
 const SOCKET_PATH = isMtgSubpath ? "/mtg/socket.io" : "/socket.io";
 const LOBBY_TOKEN_KEY = "mtg-sandbox-lobby-token";
-const KACHHAPA_TOKEN_KEYS = [
-  "kachhapa_token",
-  "kachhapaToken",
-  "access_token",
-  "accessToken",
-  "jwt",
-  "token",
-  "auth_token",
-  "authToken",
-];
-const KACHHAPA_USERNAME_FIELDS = [
-  "username",
-  "preferred_username",
-  "nickname",
-  "name",
-  "email",
-  "sub",
-];
-const KACHHAPA_PROFILE_ENDPOINTS = [
-  "/api/auth/me",
-  "/api/users/me",
-  "/api/me",
-  "/auth/me",
-];
 const SLEEVE_OPTIONS = [
   ["classic", "Classic MTG"],
   ["obsidian-matte", "Obsidian · Matte"],
@@ -59,74 +37,19 @@ function getLobbyParticipantToken() {
   return token;
 }
 
-function decodeJwtPayload(token) {
-  if (!token || !token.includes(".")) return null;
-  const [, payload] = token.split(".");
-  if (!payload) return null;
-  try {
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=");
-    const decoded = window.atob(padded);
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
+function getAccountDashboardHref() {
+  const accountHost = /^mtg\./i.test(window.location.hostname)
+    ? window.location.host.replace(/^mtg\./i, "")
+    : window.location.host;
+  return `${window.location.protocol}//${accountHost}/accountProfile`;
 }
 
-function findUsernameInPayload(payload) {
-  if (!payload || typeof payload !== "object") return "";
-  for (const field of KACHHAPA_USERNAME_FIELDS) {
-    const value = payload[field];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  if (payload.user && typeof payload.user === "object") {
-    for (const field of KACHHAPA_USERNAME_FIELDS) {
-      const value = payload.user[field];
-      if (typeof value === "string" && value.trim()) return value.trim();
-    }
-  }
-  return "";
-}
-
-function readTokenFromCookie() {
-  const cookie = document.cookie || "";
-  if (!cookie) return "";
-  const parts = cookie.split(";").map((part) => part.trim());
-  for (const key of KACHHAPA_TOKEN_KEYS) {
-    const prefix = `${key}=`;
-    const match = parts.find((part) => part.startsWith(prefix));
-    if (!match) continue;
-    const value = match.slice(prefix.length);
-    if (value) return decodeURIComponent(value);
-  }
-  return "";
-}
-
-function getStoredKachhapaToken() {
-  for (const key of KACHHAPA_TOKEN_KEYS) {
-    const local = window.localStorage.getItem(key);
-    if (local) return local;
-    const session = window.sessionStorage.getItem(key);
-    if (session) return session;
-  }
-  return readTokenFromCookie();
-}
-
-async function fetchKachhapaUsername(token) {
-  for (const endpoint of KACHHAPA_PROFILE_ENDPOINTS) {
-    try {
-      const response = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) continue;
-      const payload = await response.json();
-      const username = findUsernameInPayload(payload);
-      if (username) return username;
-    } catch {
-      // Fall through to JWT parsing fallback.
-    }
-  }
-  return "";
+function getAvatarInitials(username) {
+  const parts = String(username || "Planeswalker")
+    .trim()
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "P";
 }
 
 function App() {
@@ -137,11 +60,14 @@ function App() {
   const [createLobbyRequestId, setCreateLobbyRequestId] = useState(0);
   const [preferredLobbyDeckId, setPreferredLobbyDeckId] = useState("");
   const [matchSetup, setMatchSetup] = useState(null);
+  const [directSelections, setDirectSelections] = useState([]);
+  const [preferredLobbyRevision, setPreferredLobbyRevision] = useState("current");
 
   const [socket, setSocket] = useState(null);
 
   const [games, setGames] = useState([]);
   const [decks, setDecks] = useState([]);
+  const playDecks = useMemo(() => mergePlayDecks(decks, directSelections), [decks, directSelections]);
   const [selectedGameId, setSelectedGameId] = useState(invitedLobbyId);
   const [currentGame, setCurrentGame] = useState(null);
   const [currentGamePlayerId, setCurrentGamePlayerId] = useState("");
@@ -152,37 +78,33 @@ function App() {
   const [decksError, setDecksError] = useState("");
   const [participantToken] = useState(getLobbyParticipantToken);
   const [signedInUser, setSignedInUser] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
+  const [appearanceMode,setAppearanceMode]=useState(()=>window.KachhapaAppearance?.mode()||'dark');
+  useEffect(() => {
+    const update=()=>{const runtime=window.KachhapaAppearance;setSignedInUser(runtime?.snapshot()?.username||'');setAppearanceMode(runtime?.mode()||'dark');};
+    update();
+    window.KachhapaAppearance?.refresh().catch(()=>{});
+    window.addEventListener('appearance-changed',update);
+    return()=>window.removeEventListener('appearance-changed',update);
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function hydrateKachhapaSession() {
-      const token = getStoredKachhapaToken();
-      if (!token) {
-        if (!cancelled) setSignedInUser("");
-        return;
-      }
-
-      const apiUsername = await fetchKachhapaUsername(token);
-      const jwtPayload = decodeJwtPayload(token);
-      const jwtUsername = findUsernameInPayload(jwtPayload);
-      const resolvedUsername = apiUsername || jwtUsername || "player";
-
-      if (!cancelled) setSignedInUser(resolvedUsername);
-    }
-    hydrateKachhapaSession();
-
-    const handleStorage = (event) => {
-      if (!event.key || KACHHAPA_TOKEN_KEYS.includes(event.key)) {
-        hydrateKachhapaSession();
-      }
+    if (!userMenuOpen) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (!userMenuRef.current?.contains(event.target)) setUserMenuOpen(false);
     };
-    window.addEventListener("storage", handleStorage);
-
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
     return () => {
-      cancelled = true;
-      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
     };
-  }, []);
+  }, [userMenuOpen]);
 
   useEffect(() => {
     const socketClient = io({
@@ -464,6 +386,17 @@ function App() {
     }
   }
 
+  async function handlePreconPlay(selection, mode) {
+    if (!selection.deck || !selection.deckId || !selection.revisionId) throw new Error("The precon resolver returned an incomplete selection. Refresh details and retry.");
+    setDirectSelections((previous) => [...previous.filter((p) => p.deckId !== selection.deckId), selection]);
+    if (mode === "pvp") {
+      setPreferredLobbyRevision(selection.revisionId);
+      handleStartMatchShortcut(selection.deckId, selection.revisionId);
+    } else {
+      setMatchSetup({ mode, initialDeckId: String(selection.deckId), initialRevision: selection.revisionId });
+    }
+  }
+
   async function handleCreateLobby(lobby) {
     setPlayLoading(true);
     setPlayError("");
@@ -473,8 +406,9 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...lobby, participantToken }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || "Failed to create lobby.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload?.error || "Failed to create lobby."));
+      if (!payload.id) throw new Error("The game service returned an invalid response. Check the API proxy and retry.");
 
       setCurrentGame(payload);
       setSelectedGameId(String(payload.id));
@@ -491,17 +425,19 @@ function App() {
     }
   }
 
-  async function handleJoinLobby(gameId, deckId, password) {
+  async function handleJoinLobby(gameId, deckId, password, revision = "current") {
     setPlayLoading(true);
     setPlayError("");
     try {
       const response = await fetch(`${API_BASE}/games/${gameId}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deckId, password, participantToken }),
+        body: JSON.stringify({ deckId, password, participantToken, revision,
+          ...(Number.isInteger(Number(revision)) ? { deckVersionId: Number(revision) } : {}) }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || "Failed to join lobby.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload?.error || "Failed to join lobby."));
+      if (!payload.id) throw new Error("The game service returned an invalid response. Check the API proxy and retry.");
 
       setCurrentGame(payload);
       setSelectedGameId(String(gameId));
@@ -660,11 +596,12 @@ function App() {
     setCreateDeckRequestId((value) => value + 1);
   }
 
-  function handleStartMatchShortcut(deckId = "") {
+  function handleStartMatchShortcut(deckId = "", revision = "current") {
     setCurrentGame(null);
     setCurrentGamePlayerId("");
     setSelectedGameId("");
     setPreferredLobbyDeckId(deckId ? String(deckId) : "");
+    setPreferredLobbyRevision(revision);
     setActivePage("play");
     setCreateLobbyRequestId((value) => value + 1);
     window.history.replaceState(null, "", window.location.pathname);
@@ -695,16 +632,19 @@ function App() {
     playerDeckId,
     computerDeckId = null,
     strategy = "adaptive",
+    revision = "current",
+    computerRevision = "current",
   }) {
     setPlayLoading(true);
     setPlayError("");
     try {
-      const selectedDeck = decks.find((deck) => Number(deck.id) === Number(playerDeckId));
+      const selectedDeck = playDecks.find((deck) => Number(deck.id) === Number(playerDeckId));
       const players = [{
         seatNumber: 1,
         playerType: "human",
         deckId: Number(playerDeckId),
-        userId: 1,
+        revision,
+        ...(Number.isInteger(Number(revision)) ? { deckVersionId: Number(revision) } : {}),
       }];
       if (mode === "simulation") {
         players.push({
@@ -712,6 +652,8 @@ function App() {
           playerType: "computer",
           deckId: Number(computerDeckId),
           aiProfile: strategy,
+          revision: computerRevision,
+          ...(Number.isInteger(Number(computerRevision)) ? { deckVersionId: Number(computerRevision) } : {}),
         });
       }
       const response = await fetch(`${API_BASE}/games`, {
@@ -727,8 +669,9 @@ function App() {
           notes: mode === "simulation" ? `Computer strategy: ${strategy}` : "Solo Goldfish playtest",
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || "Could not start the match.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload?.error || "Could not start the match."));
+      if (!payload.id) throw new Error("The game service returned an invalid response. Check the API proxy and retry.");
       setCurrentGame(payload);
       setSelectedGameId(String(payload.id));
       setCurrentGamePlayerId(String(payload.currentPlayerId || payload.players?.[0]?.id || ""));
@@ -745,16 +688,16 @@ function App() {
     }
   }
 
-  function handleGoldfish(deckId = "") {
+  function handleGoldfish(deckId = "", revision = "current") {
     if (deckId) {
-      launchConfiguredMatch({ mode: "goldfish", playerDeckId: Number(deckId) });
+      launchConfiguredMatch({ mode: "goldfish", playerDeckId: Number(deckId), revision });
       return;
     }
     setMatchSetup({ mode: "goldfish", initialDeckId: "" });
   }
 
-  function handleSimulation(deckId = "") {
-    setMatchSetup({ mode: "simulation", initialDeckId: deckId ? String(deckId) : "" });
+  function handleSimulation(deckId = "", revision = "current") {
+    setMatchSetup({ mode: "simulation", initialDeckId: deckId ? String(deckId) : "", initialRevision: revision });
   }
 
   function handlePvP() {
@@ -783,7 +726,7 @@ function App() {
         <div className="page-card play-page-shell">
           <GameLobby
             games={games}
-            decks={decks}
+            decks={playDecks}
             selectedGameId={selectedGameId}
             busy={playLoading}
             onRefresh={handleRefreshGames}
@@ -795,6 +738,7 @@ function App() {
             onJoin={handleJoinLobby}
             createRequestId={createLobbyRequestId}
             preferredDeckId={preferredLobbyDeckId}
+            preferredRevision={preferredLobbyRevision}
           />
 
           {currentGame?.status === "pending" && (
@@ -947,10 +891,10 @@ function App() {
                 setSelectedDeckId(null);
                 setActivePage("decks");
               }}
-              onLaunchGame={(mode, launchDeckId) => (
+              onLaunchGame={(mode, launchDeckId, revision) => (
                 mode === "goldfish"
-                  ? handleGoldfish(launchDeckId)
-                  : handleSimulation(launchDeckId)
+                  ? handleGoldfish(launchDeckId, revision)
+                  : handleSimulation(launchDeckId, revision)
               )}
             />
           );
@@ -959,8 +903,12 @@ function App() {
           <DecksPage
             onOpenDeck={handleOpenDeck}
             createRequestId={createDeckRequestId}
+            onCreateRequestHandled={() => setCreateDeckRequestId(0)}
           />
         );
+
+      case "precons":
+        return <PreconsPage onOpenDeck={handleOpenDeck} onSaved={handleRefreshDecks} onPlay={handlePreconPlay} />;
 
       case "play":
         return renderPlayPage();
@@ -1005,7 +953,7 @@ function App() {
             onClick={() => setActivePage("profile")}
             type="button"
           >
-            Profile
+            Pod Bay
           </button>
 
           <button
@@ -1019,6 +967,7 @@ function App() {
             Your Decks
           </button>
 
+          <button type="button" className={`nav-button ${activePage === "precons" ? "active" : ""}`} onClick={() => setActivePage("precons")}>Precons</button>
           <button
             className={`nav-button ${activePage === "play" ? "active" : ""}`}
             onClick={() => setActivePage("play")}
@@ -1038,15 +987,56 @@ function App() {
 
         <div className="topbar-right">
           {signedInUser ? (
-            <div className="topbar-welcome">Welcome back {signedInUser}</div>
+            <div className="topbar-welcome">Welcome back, <strong>{signedInUser}</strong></div>
           ) : null}
-          <button
-            className={`topbar-action ${activePage === "settings" ? "active" : ""}`}
-            type="button"
-            onClick={() => setActivePage("settings")}
-          >
-            Settings
-          </button>
+          <div className="user-menu" ref={userMenuRef}>
+            <button
+              className={`user-avatar ${activePage === "settings" ? "active" : ""}`}
+              type="button"
+              aria-label={signedInUser ? `Open menu for ${signedInUser}` : "Open user menu"}
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
+              onClick={() => setUserMenuOpen((open) => !open)}
+            >
+              <span aria-hidden="true">{getAvatarInitials(signedInUser)}</span>
+            </button>
+            {userMenuOpen ? (
+              <div className="user-menu-popover" role="menu" aria-label="User menu">
+                <div className="user-menu-heading">
+                  <span>MTG Sandbox</span>
+                  <strong>{signedInUser || "Planeswalker"}</strong>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setActivePage("settings");
+                    setUserMenuOpen(false);
+                  }}
+                >
+                  <span>Settings</span>
+                  <small>Sandbox preferences</small>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    window.KachhapaAppearance
+                      ?.setMode(appearanceMode === "dark" ? "light" : "dark")
+                      .catch(() => {});
+                    setUserMenuOpen(false);
+                  }}
+                >
+                  <span>Switch to {appearanceMode === "dark" ? "Light" : "Dark"} Mode</span>
+                  <small>Shared appearance</small>
+                </button>
+                <a href={getAccountDashboardHref()} role="menuitem">
+                  <span>Account Dashboard</span>
+                  <small>Kachhapa account &amp; campaigns</small>
+                </a>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>}
 
@@ -1056,8 +1046,9 @@ function App() {
       {matchSetup ? (
         <MatchSetupModal
           mode={matchSetup.mode}
-          decks={decks}
+          decks={playDecks}
           initialDeckId={matchSetup.initialDeckId}
+          initialRevision={matchSetup.initialRevision}
           busy={playLoading}
           onClose={() => setMatchSetup(null)}
           onLaunch={launchConfiguredMatch}

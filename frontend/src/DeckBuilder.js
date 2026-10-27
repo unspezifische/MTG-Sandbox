@@ -1,5 +1,7 @@
+import DeckStatistics from "./DeckStatistics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { scryfallImageUrl } from "./cardImages";
+import { ManaCost, ManaText } from "./ManaSymbols";
 
 const isMtgSubpath = window.location.pathname.startsWith("/mtg");
 const API_BASE = isMtgSubpath ? "/mtg/api" : "/api";
@@ -396,14 +398,14 @@ function DistributionRows({ values, labels, colors, total }) {
             {Object.entries(values).map(([key, count]) => (
                 <div className="distribution-row" key={key}>
                     <span className="distribution-label">
-                        <i style={{ background: colors?.[key] || "#7e8da3" }} />
+                        <i style={{ background: colors?.[key] || "var(--accent)" }} />
                         {labels?.[key] || key}
                     </span>
                     <div className="distribution-track">
                         <span
                             style={{
                                 width: `${(count / maximum) * 100}%`,
-                                background: colors?.[key] || "#7e8da3",
+                                background: colors?.[key] || "var(--accent)",
                             }}
                         />
                     </div>
@@ -843,7 +845,11 @@ function DeckAnalytics({ entries, deckId, onLaunchGame }) {
                                         <div className="sample-hand-placeholder">No image</div>
                                     )}
                                     <strong>{entry.card?.name || "Unknown card"}</strong>
-                                    <small>{entry.card?.manaCost || entry.card?.typeLine || "—"}</small>
+                                    <small>
+                                        {entry.card?.manaCost
+                                            ? <ManaCost cost={entry.card.manaCost} size="sm" />
+                                            : entry.card?.typeLine || "—"}
+                                    </small>
                                 </div>
                             );
                         })}
@@ -903,7 +909,9 @@ function SearchDropdown({ results, onAddCard, onHoverCard, onClose, isVisible })
                                     <span className="builder-search-mv">MV {card.manaValue ?? "-"}</span>
                                 </div>
                                 <div className="builder-search-result-meta">
-                                    {card.manaCost || "—"} • {card.typeLine || "—"}
+                                    <ManaCost cost={card.manaCost} size="sm" />
+                                    <span aria-hidden="true">•</span>
+                                    <span>{card.typeLine || "—"}</span>
                                 </div>
                             </div>
 
@@ -943,7 +951,7 @@ function CardPreviewPane({ card }) {
                 <h2>{card.name}</h2>
                 <div className="builder-preview-type">{card.typeLine || "—"}</div>
                 <div className="builder-preview-line">
-                    <strong>Mana Cost:</strong> {card.manaCost || "—"}
+                    <strong>Mana Cost:</strong> <ManaCost cost={card.manaCost} />
                 </div>
                 <div className="builder-preview-line">
                     <strong>Set:</strong> {card.defaultSetName || "—"}{" "}
@@ -952,7 +960,7 @@ function CardPreviewPane({ card }) {
 
                 <div className="builder-preview-oracle">
                     <strong>Oracle Text</strong>
-                    <p>{card.oracleText || "—"}</p>
+                    <p><ManaText>{card.oracleText || "—"}</ManaText></p>
                 </div>
             </div>
         </aside>
@@ -1044,6 +1052,95 @@ function CardActionMenu({
     );
 }
 
+export function TokenPreferences({ deck, onTokenUpdated }) {
+    const [savingKey, setSavingKey] = useState("");
+    const [saveError, setSaveError] = useState("");
+    const tokens = deck.tokens || [];
+    if (!tokens.length) return null;
+
+    async function chooseVersion(token, printingId) {
+        setSavingKey(token.tokenOracleId);
+        setSaveError("");
+        try {
+            const response = await fetch(
+                `${API_BASE}/decks/${deck.id}/tokens/${encodeURIComponent(token.tokenOracleId)}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ preferredPrintingId: Number(printingId) }),
+                }
+            );
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload?.error || "Could not save token art.");
+            onTokenUpdated(payload);
+        } catch (error) {
+            setSaveError(error?.message || "Could not save token art.");
+        } finally {
+            setSavingKey("");
+        }
+    }
+
+    return (
+        <section className="deck-token-preferences" aria-labelledby="deck-token-heading">
+            <header>
+                <div>
+                    <div className="eyebrow">Play Mat pieces</div>
+                    <h2 id="deck-token-heading">Tokens this deck can create</h2>
+                </div>
+                <p>Choose the printing that will appear when you create each token during a game.</p>
+            </header>
+            {saveError ? <div className="error-box">{saveError}</div> : null}
+            <div className="deck-token-grid">
+                {tokens.map((token) => (
+                    <article className="deck-token-card" key={token.tokenOracleId}>
+                        <div className="deck-token-selected">
+                            {scryfallImageUrl(token.preferred, "normal") ? (
+                                <img src={scryfallImageUrl(token.preferred, "normal")} alt={token.name} />
+                            ) : <div className="deck-token-placeholder">Token</div>}
+                            <div>
+                                <h3>{token.name}</h3>
+                                <span>{token.power && token.toughness ? `${token.power}/${token.toughness} · ` : ""}{token.typeLine}</span>
+                                {token.createdBy?.length ? <small>Created by {token.createdBy.join(", ")}</small> : null}
+                            </div>
+                        </div>
+                        <label>
+                            <span>Preferred version</span>
+                            <select
+                                value={token.preferredPrintingId}
+                                disabled={savingKey === token.tokenOracleId}
+                                onChange={(event) => chooseVersion(token, event.target.value)}
+                            >
+                                {token.versions.map((version) => (
+                                    <option key={version.printingId} value={version.printingId}>
+                                        {version.setCode || "—"} #{version.collectorNumber || "—"}{version.artist ? ` · ${version.artist}` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <div className="deck-token-version-strip" aria-label={`${token.name} versions`}>
+                            {token.versions.map((version) => (
+                                <button
+                                    type="button"
+                                    key={version.printingId}
+                                    className={version.printingId === token.preferredPrintingId ? "selected" : ""}
+                                    aria-label={`Use ${version.setCode || "unknown set"} ${version.collectorNumber || ""} for ${token.name}`}
+                                    aria-pressed={version.printingId === token.preferredPrintingId}
+                                    disabled={savingKey === token.tokenOracleId}
+                                    onClick={() => chooseVersion(token, version.printingId)}
+                                >
+                                    {scryfallImageUrl(version, "small") ? (
+                                        <img src={scryfallImageUrl(version, "small")} alt="" />
+                                    ) : <span>{version.setCode || "?"}</span>}
+                                </button>
+                            ))}
+                        </div>
+                    </article>
+                ))}
+            </div>
+        </section>
+    );
+}
+
 function DeckGroupColumn({
     title,
     entries,
@@ -1082,7 +1179,9 @@ function DeckGroupColumn({
                         <div className="builder-card-qty">{entry.quantity}</div>
                         <div className="builder-card-name">{entry.card?.name || "Unknown Card"}</div>
                         {viewMode !== "compact" && (
-                            <div className="builder-card-cost">{entry.card?.manaCost || "—"}</div>
+                            <div className="builder-card-cost">
+                                <ManaCost cost={entry.card?.manaCost} size="sm" />
+                            </div>
                         )}
                         <CardActionMenu
                             entry={entry}
@@ -1881,6 +1980,14 @@ function DeckBuilder({ deckId, onBack, onLaunchGame }) {
                         </button>
                     </div>
                 </div>
+                {currentDeck.sourcePrecon && (
+                    <div className="builder-description">
+                        <p>Official source: <strong>{currentDeck.sourcePrecon.name}</strong> · Original commander: {currentDeck.sourcePrecon.originalCommanders.join(" + ")}</p>
+                        <p>Revision {currentDeck.revisionNumber} · {currentDeck.revisionType === "stock" ? "Original precon" : "Custom"} · {currentDeck.sourcePrecon.modifications.added} added, {currentDeck.sourcePrecon.modifications.removed} removed</p>
+                        <button type="button" onClick={() => onLaunchGame?.("goldfish", deckId, "stock")}>Play Original Precon</button>{" "}
+                        <button type="button" onClick={() => onLaunchGame?.("goldfish", deckId, "current")}>Play My Version</button>
+                    </div>
+                )}
                 {currentDeck.notes && <p className="builder-description">{currentDeck.notes}</p>}
             </section>
 
@@ -1897,6 +2004,16 @@ function DeckBuilder({ deckId, onBack, onLaunchGame }) {
                     <span>Add commander →</span>
                 </button>
             )}
+
+            <TokenPreferences
+                deck={currentDeck}
+                onTokenUpdated={(updatedToken) => setCurrentDeck((deck) => ({
+                    ...deck,
+                    tokens: (deck.tokens || []).map((token) => (
+                        token.tokenOracleId === updatedToken.tokenOracleId ? updatedToken : token
+                    )),
+                }))}
+            />
 
             <div className="builder-header">
                 <div className="builder-header-left">
@@ -2027,6 +2144,8 @@ function DeckBuilder({ deckId, onBack, onLaunchGame }) {
                     </div>
                 </main>
             </div>
+
+            <DeckStatistics key={currentDeck.id} deck={currentDeck} />
 
             <DeckAnalytics
                 entries={analyticsCards}

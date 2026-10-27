@@ -1,3 +1,4 @@
+import { apiErrorMessage } from "./preconApi";
 import React, { useEffect, useMemo, useState } from "react";
 
 const isMtgSubpath = window.location.pathname.startsWith("/mtg");
@@ -34,7 +35,7 @@ function relativeTimestamp(value) {
 }
 
 function DeckRow({ deck, onOpenDeck, onGoldfish }) {
-  const losses = Math.max(0, Number(deck.gamesPlayed || 0) - Number(deck.wins || 0));
+  const losses = Number(deck.losses || 0);
   return (
     <div className="list-row">
       <div className="list-row-main">
@@ -62,9 +63,12 @@ function DeckRow({ deck, onOpenDeck, onGoldfish }) {
 }
 
 function GameRow({ game, onNavigate }) {
-  const human = game.players?.find((player) => player.playerType === "human" && player.deckId)
+  const mine = game.myParticipations?.[0];
+  const human = game.players?.find((player) => player.id === mine?.gamePlayerId)
+    || game.players?.find((player) => player.playerType === "human" && player.deckId)
     || game.players?.find((player) => player.deckId);
-  const winner = game.players?.find((player) => player.id === game.winnerGamePlayerId);
+  const outcome = game.isInvalidated ? "Invalidated"
+    : game.myParticipations?.length > 1 ? "Multiple seats" : (mine?.result || game.status);
   return (
     <div className="list-row">
       <div className="list-row-main">
@@ -75,7 +79,7 @@ function GameRow({ game, onNavigate }) {
       </div>
 
       <div className="list-row-meta">
-        <div>{winner ? (winner.id === human?.id ? "Win" : "Loss") : game.status}</div>
+        <div>{outcome}</div>
         <div className="muted-text">{relativeTimestamp(game.endedAt || game.startedAt || game.createdAt)}</div>
       </div>
 
@@ -112,6 +116,7 @@ function Profile({
   const [decks, setDecks] = useState([]);
   const [recentDecks, setRecentDecks] = useState([]);
   const [recentGames, setRecentGames] = useState([]);
+  const [statistics, setStatistics] = useState(null);
   const [deckError, setDeckError] = useState("");
 
   useEffect(() => {
@@ -119,23 +124,22 @@ function Profile({
     Promise.all([
       fetch(`${API_BASE}/decks`),
       fetch(`${API_BASE}/decks?recent=true`),
-      fetch(`${API_BASE}/games`),
+      fetch(`${API_BASE}/profile/history?status=completed&limit=3`),
+      fetch(`${API_BASE}/profile/stats`),
     ])
-      .then(async ([allResponse, recentResponse, gamesResponse]) => {
-        if (!allResponse.ok || !recentResponse.ok || !gamesResponse.ok) {
-          throw new Error("Could not load profile activity.");
+      .then(async ([allResponse, recentResponse, gamesResponse, statsResponse]) => {
+        if (!allResponse.ok || !recentResponse.ok || !gamesResponse.ok || !statsResponse.ok) {
+          const failed = [allResponse, recentResponse, gamesResponse, statsResponse].find((response) => !response.ok);
+          throw new Error(apiErrorMessage(failed.status, "Could not load profile activity."));
         }
-        return Promise.all([allResponse.json(), recentResponse.json(), gamesResponse.json()]);
+        return Promise.all([allResponse.json(), recentResponse.json(), gamesResponse.json(), statsResponse.json()]);
       })
-      .then(([allPayload, recentPayload, gamesPayload]) => {
+      .then(([allPayload, recentPayload, gamesPayload, statsPayload]) => {
         if (!cancelled) {
           setDecks(Array.isArray(allPayload) ? allPayload : []);
           setRecentDecks(Array.isArray(recentPayload) ? recentPayload.slice(0, 3) : []);
-          setRecentGames(
-            Array.isArray(gamesPayload)
-              ? gamesPayload.filter((game) => game.status === "completed").slice(0, 3)
-              : []
-          );
+          setRecentGames(Array.isArray(gamesPayload.games) ? gamesPayload.games : []);
+          setStatistics(statsPayload);
         }
       })
       .catch((error) => {
@@ -146,26 +150,23 @@ function Profile({
     };
   }, []);
 
-  const deckStats = useMemo(() => {
-    const games = decks.reduce((total, deck) => total + Number(deck.gamesPlayed || 0), 0);
-    const wins = decks.reduce((total, deck) => total + Number(deck.wins || 0), 0);
-    const best = [...decks].sort((a, b) => Number(b.wins || 0) - Number(a.wins || 0))[0];
-    return {
-      games,
-      wins,
-      best,
-      winRate: games ? Math.round((wins / games) * 100) : 0,
-    };
-  }, [decks]);
+  const bestDeck = useMemo(
+    () => [...decks].sort((a, b) => Number(b.wins || 0) - Number(a.wins || 0))[0],
+    [decks]
+  );
+  const library = statistics?.library;
+  const winRateLabel = library?.winRate == null ? "—" : `${library.winRate}%`;
+
 
   return (
     <div className="page-shell">
       <section className="hero-card">
         <div>
+          <div className="eyebrow">Pod Bay</div>
           <h1>Welcome back</h1>
           <p>
-            Jump back into deck refinement, launch a game mode, or review recent
-            performance.
+            Your command center for career stats and game history. Jump back into
+            deck refinement, launch a game mode, or review recent performance.
           </p>
         </div>
 
@@ -173,8 +174,8 @@ function Profile({
           <button type="button" onClick={onCreateDeck}>
             Create New Deck
           </button>
-          <button type="button" onClick={() => onNavigate("decks")}>
-            Open Deck Builder
+          <button type="button" onClick={() => onNavigate("precons")}>
+            Browse Precons
           </button>
           <button type="button" onClick={() => onStartMatch()}>
             Start a Match
@@ -184,9 +185,9 @@ function Profile({
 
       <section className="stats-grid">
         <StatCard label="Decks" value={decks.length} subtext="Saved deck lists" />
-        <StatCard label="Games" value={deckStats.games} subtext="Across all decks" />
-        <StatCard label="Win Rate" value={`${deckStats.winRate}%`} subtext="Completed games" />
-        <StatCard label="Best Deck" value={deckStats.best?.name || "—"} subtext="Most recorded wins" />
+        <StatCard label="Games" value={library?.gamesPlayed ?? "—"} subtext="Competitive games with saved decks" />
+        <StatCard label="Library Win Rate" value={winRateLabel} subtext="Completed PvP; draws excluded" />
+        <StatCard label="Best Deck" value={bestDeck?.name || "—"} subtext="Most recorded wins" />
       </section>
 
       <section className="content-grid">

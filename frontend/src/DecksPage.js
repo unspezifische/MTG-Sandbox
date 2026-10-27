@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { scryfallImageUrl } from "./cardImages";
+import { ColorIdentitySymbols } from "./ManaSymbols";
 
 const isMtgSubpath = window.location.pathname.startsWith("/mtg");
 const API_BASE = isMtgSubpath ? "/mtg/api" : "/api";
@@ -32,14 +33,6 @@ const COMMANDER_FORMATS = new Set([
   "pauper-edh",
   "oathbreaker",
 ]);
-
-const COLOR_LABELS = {
-  W: "White",
-  U: "Blue",
-  B: "Black",
-  R: "Red",
-  G: "Green",
-};
 
 function isCommanderEligible(card) {
   const typeLine = card?.typeLine || "";
@@ -78,22 +71,6 @@ function isCompatiblePartner(primary, candidate) {
     return (candidate.typeLine || "").toLowerCase().includes("doctor");
   }
   return false;
-}
-
-function ColorIdentity({ colors }) {
-  if (!Array.isArray(colors) || colors.length === 0) {
-    return <span className="deck-colorless">Colorless</span>;
-  }
-
-  return (
-    <span className="deck-color-row" aria-label={colors.map((color) => COLOR_LABELS[color]).join(", ")}>
-      {colors.map((color) => (
-        <span key={color} className={`mana-dot mana-${color.toLowerCase()}`} title={COLOR_LABELS[color]}>
-          {color}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 function CreateDeckModal({ onClose, onCreated }) {
@@ -670,7 +647,7 @@ function LibraryDeckSettingsModal({ deck, onClose, onSaved }) {
   );
 }
 
-function DecksPage({ onOpenDeck, createRequestId = 0 }) {
+function DecksPage({ onOpenDeck, createRequestId = 0, onCreateRequestHandled }) {
   const [decks, setDecks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -681,8 +658,11 @@ function DecksPage({ onOpenDeck, createRequestId = 0 }) {
   const [commanderDeck, setCommanderDeck] = useState(null);
 
   useEffect(() => {
-    if (createRequestId > 0) setShowCreate(true);
-  }, [createRequestId]);
+    if (createRequestId > 0) {
+      setShowCreate(true);
+      onCreateRequestHandled?.();
+    }
+  }, [createRequestId, onCreateRequestHandled]);
 
   useEffect(() => {
     async function loadDecks() {
@@ -823,7 +803,7 @@ function DecksPage({ onOpenDeck, createRequestId = 0 }) {
                       <small>{deck.commanderNames?.join(" + ") || "No commander"}</small>
                     </td>
                     <td><span className="format-pill">{deck.format || "none"}</span></td>
-                    <td><ColorIdentity colors={deck.colorIdentity} /></td>
+                    <td><ColorIdentitySymbols colors={deck.colorIdentity} /></td>
                     <td>{deck.cardCount || 0}</td>
                     <td>{deck.gamesPlayed || 0}</td>
                     <td>

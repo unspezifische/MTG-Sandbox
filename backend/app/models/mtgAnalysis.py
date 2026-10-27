@@ -35,7 +35,6 @@ class CardRoleTag(db.Model):
         foreign_keys="CardRoleTag.cardId",
     )
 
-
 class CardMatchupTag(db.Model):
     __tablename__ = "cardMatchupTags"
     __table_args__ = (
@@ -67,7 +66,6 @@ class CardMatchupTag(db.Model):
         foreign_keys="CardMatchupTag.cardId",
     )
 
-
 class Archetype(db.Model):
     __tablename__ = "archetypes"
     __table_args__ = {"schema": "mtgAnalysis"}
@@ -79,7 +77,6 @@ class Archetype(db.Model):
     tagsJson = db.Column(JSONB)
 
     createdAt = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
-
 
 class DeckSnapshot(db.Model):
     __tablename__ = "deckSnapshots"
@@ -133,7 +130,6 @@ class DeckSnapshot(db.Model):
         foreign_keys="DeckMatchupProfile.deckSnapshotId",
     )
 
-
 class DeckMetric(db.Model):
     __tablename__ = "deckMetrics"
     __table_args__ = (
@@ -166,7 +162,6 @@ class DeckMetric(db.Model):
         foreign_keys="DeckMetric.deckSnapshotId",
     )
 
-
 class DeckMatchupProfile(db.Model):
     __tablename__ = "deckMatchupProfiles"
     __table_args__ = (
@@ -196,7 +191,6 @@ class DeckMatchupProfile(db.Model):
         lazy=True,
         foreign_keys="DeckMatchupProfile.deckSnapshotId",
     )
-
 
 class SimulationRun(db.Model):
     __tablename__ = "simulationRuns"

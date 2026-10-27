@@ -33,7 +33,9 @@ BATCH_SIZE = 1000
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Import MTGJSON SQLite into Postgres.")
+    parser = argparse.ArgumentParser(
+        description="Import MTGJSON cards and tokens into Postgres. Existing IDs are preserved."
+    )
     parser.add_argument("--pg-url", default=DEFAULT_PG_RAW_URL)
     parser.add_argument("--sqlite-path", default=DEFAULT_SQLITE_PATH)
     parser.add_argument(
@@ -214,11 +216,14 @@ def wipe_analysis_import_tables(pg_conn) -> None:
     pg_conn.commit()
 
 
-def load_card_identifiers(sqlite_conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    if not table_exists(sqlite_conn, "cardIdentifiers"):
+def load_identifiers(
+    sqlite_conn: sqlite3.Connection,
+    table_name: str,
+) -> dict[str, dict[str, Any]]:
+    if not table_exists(sqlite_conn, table_name):
         return {}
 
-    rows = sqlite_conn.execute("SELECT * FROM cardIdentifiers").fetchall()
+    rows = sqlite_conn.execute(f"SELECT * FROM {qident(table_name)}").fetchall()
     result: dict[str, dict[str, Any]] = {}
     for row in rows:
         row_dict = dict(row)
@@ -226,6 +231,14 @@ def load_card_identifiers(sqlite_conn: sqlite3.Connection) -> dict[str, dict[str
         if uuid:
             result[uuid] = row_dict
     return result
+
+
+def source_tables(sqlite_conn: sqlite3.Connection) -> list[tuple[str, bool]]:
+    """Return card-like MTGJSON tables and whether their rows are tokens."""
+    tables = [("cards", False)]
+    if table_exists(sqlite_conn, "tokens"):
+        tables.append(("tokens", True))
+    return tables
 
 
 def load_set_lookup(sqlite_conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
@@ -278,6 +291,15 @@ def import_sets(pg_conn, set_lookup: dict[str, dict[str, Any]]) -> dict[str, int
     INSERT INTO "mtgCore"."sets"
     ("code", "name", "releaseDate", "block", "setType", "isDigital", "totalCards", "tokenCount", "rawJson")
     VALUES %s
+    ON CONFLICT ("code") DO UPDATE SET
+      "name" = EXCLUDED."name",
+      "releaseDate" = EXCLUDED."releaseDate",
+      "block" = EXCLUDED."block",
+      "setType" = EXCLUDED."setType",
+      "isDigital" = EXCLUDED."isDigital",
+      "totalCards" = EXCLUDED."totalCards",
+      "tokenCount" = EXCLUDED."tokenCount",
+      "rawJson" = EXCLUDED."rawJson"
     """
 
     with pg_conn.cursor() as cur:
@@ -309,9 +331,10 @@ def import_cards_and_faces(
     face_rows = []
     uuid_to_card_payload: dict[str, dict[str, Any]] = {}
 
-    sql = "SELECT * FROM cards"
-    for batch in fetch_rows(sqlite_conn, sql):
-        for row in batch:
+    for table_name, force_token in source_tables(sqlite_conn):
+        sql = f"SELECT * FROM {qident(table_name)}"
+        for batch in fetch_rows(sqlite_conn, sql):
+          for row in batch:
             raw = dict(row)
             uuid = raw.get("uuid")
             name = raw.get("name")
@@ -340,7 +363,7 @@ def import_cards_and_faces(
                 "defense": raw.get("defense"),
                 "layout": raw.get("layout"),
                 "side": raw.get("side"),
-                "isToken": to_bool(raw.get("isToken")) or False,
+                "isToken": force_token or to_bool(raw.get("isToken")) or False,
                 "isReserved": to_bool(raw.get("isReserved")),
                 "isReprint": to_bool(raw.get("isReprint")),
                 "edhrecRank": to_int(raw.get("edhrecRank")),
@@ -401,6 +424,22 @@ def import_cards_and_faces(
     "defaultSetName","rarity","availability","identifiers","legalities","rawJson"
     )
     VALUES %s
+    ON CONFLICT ("uuid") DO UPDATE SET
+      "oracleId" = EXCLUDED."oracleId", "name" = EXCLUDED."name",
+      "normalizedName" = EXCLUDED."normalizedName", "faceName" = EXCLUDED."faceName",
+      "manaCost" = EXCLUDED."manaCost", "manaValue" = EXCLUDED."manaValue",
+      "colors" = EXCLUDED."colors", "colorIdentity" = EXCLUDED."colorIdentity",
+      "typeLine" = EXCLUDED."typeLine", "oracleText" = EXCLUDED."oracleText",
+      "power" = EXCLUDED."power", "toughness" = EXCLUDED."toughness",
+      "loyalty" = EXCLUDED."loyalty", "defense" = EXCLUDED."defense",
+      "layout" = EXCLUDED."layout", "side" = EXCLUDED."side",
+      "isToken" = EXCLUDED."isToken", "isReserved" = EXCLUDED."isReserved",
+      "isReprint" = EXCLUDED."isReprint", "edhrecRank" = EXCLUDED."edhrecRank",
+      "defaultSetCode" = EXCLUDED."defaultSetCode",
+      "defaultSetName" = EXCLUDED."defaultSetName", "rarity" = EXCLUDED."rarity",
+      "availability" = EXCLUDED."availability", "identifiers" = EXCLUDED."identifiers",
+      "legalities" = EXCLUDED."legalities", "rawJson" = EXCLUDED."rawJson",
+      "updatedAt" = NOW()
     """
 
     with pg_conn.cursor() as cur:
@@ -444,6 +483,15 @@ def import_cards_and_faces(
             )
         )
 
+    # Faces are fully derived from the source rows. Replacing them makes a refresh
+    # idempotent without changing stable card IDs referenced by decks and games.
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            'DELETE FROM "mtgCore"."cardFaces" WHERE "cardId" = ANY(%s)',
+            (list(uuid_to_card_id.values()),),
+        )
+    pg_conn.commit()
+
     if face_insert_rows:
         insert_faces_sql = """
         INSERT INTO "mtgCore"."cardFaces"
@@ -475,8 +523,9 @@ def import_printings(
 ) -> dict[str, int]:
     rows = []
 
-    for batch in fetch_rows(sqlite_conn, "SELECT * FROM cards"):
-        for row in batch:
+    for table_name, _force_token in source_tables(sqlite_conn):
+        for batch in fetch_rows(sqlite_conn, f"SELECT * FROM {qident(table_name)}"):
+          for row in batch:
             raw = dict(row)
             uuid = raw.get("uuid")
             if not uuid:
@@ -518,6 +567,14 @@ def import_printings(
     "identifiers","rawJson"
     )
     VALUES %s
+    ON CONFLICT ("uuid") DO UPDATE SET
+      "cardId" = EXCLUDED."cardId", "setId" = EXCLUDED."setId",
+      "collectorNumber" = EXCLUDED."collectorNumber", "rarity" = EXCLUDED."rarity",
+      "artist" = EXCLUDED."artist", "flavorText" = EXCLUDED."flavorText",
+      "frameVersion" = EXCLUDED."frameVersion", "borderColor" = EXCLUDED."borderColor",
+      "language" = EXCLUDED."language", "isPromo" = EXCLUDED."isPromo",
+      "isFullArt" = EXCLUDED."isFullArt", "availability" = EXCLUDED."availability",
+      "identifiers" = EXCLUDED."identifiers", "rawJson" = EXCLUDED."rawJson"
     """
 
     with pg_conn.cursor() as cur:
@@ -569,6 +626,10 @@ def import_products(
     INSERT INTO "mtgCore"."products"
     ("productCode","name","productType","setId","releaseDate","rawJson")
     VALUES %s
+    ON CONFLICT ("productCode") DO UPDATE SET
+      "name" = EXCLUDED."name", "productType" = EXCLUDED."productType",
+      "setId" = EXCLUDED."setId", "releaseDate" = EXCLUDED."releaseDate",
+      "rawJson" = EXCLUDED."rawJson"
     """
 
     with pg_conn.cursor() as cur:
@@ -648,6 +709,7 @@ def print_counts(pg_conn) -> None:
     checks = [
         ('sets', 'SELECT COUNT(*) FROM "mtgCore"."sets"'),
         ('cards', 'SELECT COUNT(*) FROM "mtgCore"."cards"'),
+        ('tokens', 'SELECT COUNT(*) FROM "mtgCore"."cards" WHERE "isToken"'),
         ('cardFaces', 'SELECT COUNT(*) FROM "mtgCore"."cardFaces"'),
         ('printings', 'SELECT COUNT(*) FROM "mtgCore"."printings"'),
         ('products', 'SELECT COUNT(*) FROM "mtgCore"."products"'),
@@ -676,12 +738,17 @@ def main() -> None:
             wipe_analysis_import_tables(pg_conn)
 
         print("Loading identifier and set lookup data from SQLite...")
-        card_identifiers = load_card_identifiers(sqlite_conn)
+        card_identifiers = load_identifiers(sqlite_conn, "cardIdentifiers")
+        token_identifiers = load_identifiers(sqlite_conn, "tokenIdentifiers")
+        card_identifiers.update(token_identifiers)
         set_lookup = load_set_lookup(sqlite_conn)
         products = load_products(sqlite_conn)
         product_contents = load_product_contents(sqlite_conn)
 
-        print(f"Loaded {len(card_identifiers)} cardIdentifiers rows.")
+        print(
+            f"Loaded {len(card_identifiers) - len(token_identifiers)} cardIdentifiers "
+            f"and {len(token_identifiers)} tokenIdentifiers rows."
+        )
         print(f"Loaded {len(set_lookup)} sets rows.")
         print(f"Loaded {len(products)} product rows.")
         print(f"Loaded {len(product_contents)} product content rows.")

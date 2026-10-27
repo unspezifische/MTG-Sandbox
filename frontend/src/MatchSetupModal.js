@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from "react";
 
+import { launchRevision } from "./preconApi";
+import DeckRevisionSelect from "./DeckRevisionSelect";
+
 const STRATEGIES = [
   ["relaxed", "Relaxed", "Plays fewer spells and favors a slower practice game."],
   ["adaptive", "Adaptive", "Balances creatures, utility cards, and mana curve."],
@@ -12,6 +15,7 @@ export default function MatchSetupModal({
   mode,
   decks,
   initialDeckId = "",
+  initialRevision = "current",
   busy = false,
   onClose,
   onLaunch,
@@ -27,6 +31,10 @@ export default function MatchSetupModal({
   const [computerDeckId, setComputerDeckId] = useState(
     String(playableDecks.find((deck) => String(deck.id) !== preferred)?.id || preferred)
   );
+  const [revision, setRevision] = useState(initialRevision);
+  const [computerRevision, setComputerRevision] = useState("current");
+  const selectedDeck = playableDecks.find((d) => String(d.id) === String(playerDeckId));
+  const opponentDeck = playableDecks.find((d) => String(d.id) === String(computerDeckId));
   const [strategy, setStrategy] = useState("adaptive");
   const [error, setError] = useState("");
   const isSimulation = mode === "simulation";
@@ -43,6 +51,8 @@ export default function MatchSetupModal({
       playerDeckId: Number(playerDeckId),
       computerDeckId: isSimulation ? Number(computerDeckId) : null,
       strategy,
+      revision: launchRevision(selectedDeck, revision),
+      computerRevision: launchRevision(opponentDeck, computerRevision),
     });
     if (result?.error) setError(result.error);
     else onClose();
@@ -68,22 +78,24 @@ export default function MatchSetupModal({
         <div className="deck-modal-body match-setup-fields">
           <label>
             <span>Your deck</span>
-            <select className="modal-input" value={playerDeckId} onChange={(event) => setPlayerDeckId(event.target.value)}>
+            <select className="modal-input" value={playerDeckId} onChange={(event) => { setPlayerDeckId(event.target.value); setRevision(playableDecks.find((d) => String(d.id) === event.target.value)?.resolvedRevisionId || "current"); }}>
               {playableDecks.map((deck) => (
                 <option value={deck.id} key={deck.id}>{deck.name} · {deck.format}</option>
               ))}
             </select>
           </label>
+          <DeckRevisionSelect deck={selectedDeck} value={revision} onChange={setRevision} />
           {isSimulation ? (
             <>
               <label>
                 <span>Computer deck</span>
-                <select className="modal-input" value={computerDeckId} onChange={(event) => setComputerDeckId(event.target.value)}>
+                <select className="modal-input" value={computerDeckId} onChange={(event) => { setComputerDeckId(event.target.value); setComputerRevision(playableDecks.find((d) => String(d.id) === event.target.value)?.resolvedRevisionId || "current"); }}>
                   {playableDecks.map((deck) => (
                     <option value={deck.id} key={deck.id}>{deck.name} · {deck.format}</option>
                   ))}
                 </select>
               </label>
+              <DeckRevisionSelect deck={opponentDeck} value={computerRevision} onChange={setComputerRevision} label="Computer deck version" />
               <fieldset className="strategy-options">
                 <legend>Computer strategy</legend>
                 {STRATEGIES.map(([value, label, description]) => (

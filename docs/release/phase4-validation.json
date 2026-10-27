@@ -1,0 +1,39 @@
+{
+  "releaseReady": false,
+  "timestamp": "2026-10-21T20:12:37.891855+00:00",
+  "sourceCheckpoint": "docs/release/phase1-3-worktree-20261021T194351Z.tar.gz",
+  "sourceCheckpointVerified": true,
+  "tests": {
+    "backendPassed": 38,
+    "backendSkipped": 1,
+    "frontendPassed": 27,
+    "frontendSuites": 9,
+    "postgresConcurrency": "invoked but skipped: MTG_TEST_POSTGRES_URL unset"
+  },
+  "localBrowser": {
+    "fixtureOnly": true,
+    "widths": [
+      390,
+      1280
+    ],
+    "views": [
+      "catalog",
+      "detail",
+      "history",
+      "statistics"
+    ],
+    "pageHorizontalOverflowObserved": false,
+    "sharedThemeLoaded": true,
+    "realIdentityVerified": false
+  },
+  "liveBlockers": [
+    "raspberrypii.local did not resolve for SSH",
+    "No target database URL configured",
+    "No PostgreSQL clients or Docker on PATH",
+    "Populated database backup/migration not performed",
+    "Full current MTGJSON sync and import review not performed",
+    "Real auth/proxy/signed-in smoke/performance checks pending",
+    "Previously deployed frontend/backend rollback artifacts not captured"
+  ],
+  "runbook": "docs/precon-phase4-release.md"
+}

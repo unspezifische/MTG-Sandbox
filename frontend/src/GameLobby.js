@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from "react";
 
+import { launchRevision } from "./preconApi";
+import DeckRevisionSelect from "./DeckRevisionSelect";
+
 const FORMAT_OPTIONS = [
     ["commander", "Commander"],
     ["standard", "Standard"],
@@ -26,7 +29,7 @@ function optionLabel(options, value) {
     return options.find(([key]) => key === value)?.[1] || value || "—";
 }
 
-function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = "" }) {
+function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = "", preferredRevision = "current" }) {
     const playableDecks = decks.filter((deck) => Number(deck.cardCount) > 0);
     const [name, setName] = useState("");
     const [format, setFormat] = useState("commander");
@@ -38,6 +41,7 @@ function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = ""
             ? preferredDeckId
             : (playableDecks[0]?.id || "")
     );
+    const [revision, setRevision] = useState(preferredRevision);
     const [password, setPassword] = useState("");
     const [notes, setNotes] = useState("");
     const [localError, setLocalError] = useState("");
@@ -66,7 +70,9 @@ function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = ""
             hostDeckId: Number(hostDeckId),
             password,
             notes: notes.trim(),
-            userId: 1,
+            revision: launchRevision(playableDecks.find((d) => String(d.id) === String(hostDeckId)), revision),
+            ...(Number.isInteger(Number(launchRevision(playableDecks.find((d) => String(d.id) === String(hostDeckId)), revision))) ?
+              { hostDeckVersionId: Number(launchRevision(playableDecks.find((d) => String(d.id) === String(hostDeckId)), revision)) } : {}),
         });
         if (created?.error) setLocalError(created.error);
         else if (created) onClose();
@@ -137,8 +143,8 @@ function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = ""
 
                     <label className="lobby-field">
                         <span>Your deck</span>
-                        <select className="modal-input" value={hostDeckId} onChange={(event) => setHostDeckId(event.target.value)}>
-                            <option value="">Choose a saved deck…</option>
+                        <select className="modal-input" value={hostDeckId} onChange={(event) => { setHostDeckId(event.target.value); setRevision(playableDecks.find((d) => String(d.id) === event.target.value)?.resolvedRevisionId || "current"); }}>
+                            <option value="">Choose a deck…</option>
                             {playableDecks.map((deck) => (
                                 <option key={deck.id} value={deck.id}>
                                     {deck.name} · {deck.format} · {deck.cardCount} cards
@@ -147,6 +153,7 @@ function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = ""
                         </select>
                     </label>
 
+                    <DeckRevisionSelect deck={playableDecks.find((d) => String(d.id) === String(hostDeckId))} value={revision} onChange={setRevision} />
                     <label className="lobby-field">
                         <span>Password <small>Optional</small></span>
                         <input
@@ -187,12 +194,13 @@ function CreateLobbyModal({ decks, onClose, onCreate, busy, preferredDeckId = ""
     );
 }
 
-function JoinLobbyModal({ game, decks, onClose, onJoin, onReloadDecks, decksLoading, decksError, busy }) {
+function JoinLobbyModal({ game, decks, onClose, onJoin, onReloadDecks, decksLoading, decksError, busy, preferredDeckId = "", preferredRevision = "current" }) {
     const playableDecks = useMemo(
         () => decks.filter((deck) => Number(deck.cardCount) > 0),
         [decks]
     );
-    const [deckId, setDeckId] = useState(playableDecks[0]?.id || "");
+    const [deckId, setDeckId] = useState(playableDecks.some((d) => String(d.id) === String(preferredDeckId)) ? preferredDeckId : playableDecks[0]?.id || "");
+    const [revision, setRevision] = useState(preferredDeckId ? preferredRevision : "current");
     const [password, setPassword] = useState("");
     const [localError, setLocalError] = useState("");
 
@@ -213,7 +221,7 @@ function JoinLobbyModal({ game, decks, onClose, onJoin, onReloadDecks, decksLoad
             return;
         }
         setLocalError("");
-        const joined = await onJoin(game.id, Number(deckId), password);
+        const joined = await onJoin(game.id, Number(deckId), password, launchRevision(playableDecks.find((d) => String(d.id) === String(deckId)), revision));
         if (joined?.error) setLocalError(joined.error);
         else if (joined) onClose();
     }
@@ -248,8 +256,8 @@ function JoinLobbyModal({ game, decks, onClose, onJoin, onReloadDecks, decksLoad
                     )}
                     <label className="lobby-field">
                         <span>Your deck</span>
-                        <select className="modal-input" value={deckId} onChange={(event) => setDeckId(event.target.value)} disabled={decksLoading}>
-                            <option value="">{decksLoading ? "Loading saved decks…" : "Choose a saved deck…"}</option>
+                        <select className="modal-input" value={deckId} onChange={(event) => { setDeckId(event.target.value); setRevision(playableDecks.find((d) => String(d.id) === event.target.value)?.resolvedRevisionId || "current"); }} disabled={decksLoading}>
+                            <option value="">{decksLoading ? "Loading saved decks…" : "Choose a deck…"}</option>
                             {playableDecks.map((deck) => (
                                 <option key={deck.id} value={deck.id}>{deck.name} · {deck.cardCount} cards</option>
                             ))}
@@ -261,6 +269,7 @@ function JoinLobbyModal({ game, decks, onClose, onJoin, onReloadDecks, decksLoad
                             <button type="button" className="button-secondary" onClick={onReloadDecks}>Retry saved decks</button>
                         </div>
                     )}
+                    <DeckRevisionSelect deck={playableDecks.find((d) => String(d.id) === String(deckId))} value={revision} onChange={setRevision} />
                     {game.isPasswordProtected && (
                         <label className="lobby-field">
                             <span>Lobby password</span>
@@ -301,6 +310,7 @@ export default function GameLobby({
     decksError = "",
     createRequestId = 0,
     preferredDeckId = "",
+    preferredRevision = "current",
 }) {
     const [search, setSearch] = useState("");
     const [gameMode, setGameMode] = useState("all");
@@ -433,12 +443,15 @@ export default function GameLobby({
                     onCreate={onCreate}
                     onClose={() => setShowCreate(false)}
                     preferredDeckId={preferredDeckId}
+                    preferredRevision={preferredRevision}
                 />
             )}
             {joinGame && (
                 <JoinLobbyModal
                     game={joinGame}
                     decks={decks}
+                    preferredDeckId={preferredDeckId}
+                    preferredRevision={preferredRevision}
                     busy={busy}
                     onJoin={onJoin}
                     onReloadDecks={onRefreshDecks}

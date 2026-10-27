@@ -50,6 +50,9 @@ class Game(db.Model):
         index=True,
     )
 
+    isInvalidated = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    invalidationReason = db.Column(db.Text)
+
     notes = db.Column(db.Text)
     createdAt = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -183,6 +186,8 @@ class GamePlayer(db.Model):
     __tablename__ = "gamePlayers"
     __table_args__ = (
         db.UniqueConstraint("gameId", "seatNumber", name="uq_gamePlayers_game_seat"),
+        db.Index("ix_gamePlayers_user_game_type", "userId", "gameId", "playerType"),
+        db.Index("ix_gamePlayers_deck_user_revision", "deckId", "userId", "deckVersionId"),
         {"schema": "mtgGames"},
     )
 
@@ -222,6 +227,7 @@ class GamePlayer(db.Model):
     isConnected = db.Column(db.Boolean, nullable=False, default=False)
     disconnectedAt = db.Column(db.DateTime(timezone=True))
     sleeveStyle = db.Column(db.Text, nullable=False, default="classic")
+    tokenSelections = db.Column(JSONB, nullable=False, default=list, server_default="[]")
 
     finalPlacement = db.Column(db.Integer)
     result = db.Column(db.Text, index=True)
@@ -306,6 +312,7 @@ class GamePlayer(db.Model):
         isConnected=False,
         disconnectedAt=None,
         sleeveStyle="classic",
+        tokenSelections=None,
         finalPlacement=None,
         result=None,
         commanderCastCount=0,
@@ -326,6 +333,7 @@ class GamePlayer(db.Model):
         self.isConnected = isConnected
         self.disconnectedAt = disconnectedAt
         self.sleeveStyle = sleeveStyle
+        self.tokenSelections = tokenSelections if tokenSelections is not None else []
         self.finalPlacement = finalPlacement
         self.result = result
         self.commanderCastCount = commanderCastCount
